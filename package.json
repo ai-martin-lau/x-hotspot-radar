@@ -1,0 +1,23 @@
+{
+  "name": "x-hotspot-radar",
+  "version": "0.1.0",
+  "description": "Local X/Twitter hotspot radar for finding high-leverage reply opportunities.",
+  "type": "module",
+  "private": false,
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check server.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "x",
+    "twitter",
+    "claude-code",
+    "cdp",
+    "social-media",
+    "reply"
+  ],
+  "license": "MIT"
+}

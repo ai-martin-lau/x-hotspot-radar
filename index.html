@@ -1,0 +1,1727 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>X 热点雷达</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f5f7;
+      --panel: rgba(255, 255, 255, 0.86);
+      --panel-strong: #ffffff;
+      --text: #1d1d1f;
+      --muted: #6e6e73;
+      --soft: #f2f2f5;
+      --line: rgba(0, 0, 0, 0.09);
+      --blue: #0071e3;
+      --blue-soft: rgba(0, 113, 227, 0.1);
+      --green: #16833a;
+      --orange: #bf5a00;
+      --shadow: 0 14px 34px rgba(0, 0, 0, 0.07);
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+
+    button, input, select, textarea {
+      font: inherit;
+    }
+
+    .app {
+      width: min(1200px, calc(100vw - 40px));
+      margin: 0 auto;
+      padding: 30px 0 48px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 22px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+      line-height: 1.12;
+      font-weight: 760;
+    }
+
+    .subtitle {
+      margin: 0;
+      max-width: 720px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 11px;
+      border: 1px solid rgba(0, 113, 227, 0.18);
+      border-radius: 999px;
+      color: var(--blue);
+      background: rgba(255, 255, 255, 0.68);
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      overflow: hidden;
+    }
+
+    .panel-inner {
+      padding: 20px;
+    }
+
+    .panel-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .panel-title h2 {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.2;
+    }
+
+    .quiet {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .quick-guide {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .quick-step {
+      display: grid;
+      grid-template-columns: 26px 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 11px;
+      border-radius: 14px;
+      background: var(--soft);
+      border: 1px solid rgba(0, 0, 0, 0.04);
+    }
+
+    .quick-step b {
+      display: grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: #fff;
+      font-size: 12px;
+    }
+
+    .quick-step strong {
+      display: block;
+      margin-bottom: 2px;
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .quick-step span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    label {
+      color: #3a3a3c;
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.92);
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    }
+
+    input, select {
+      min-height: 40px;
+      padding: 0 12px;
+    }
+
+    textarea {
+      min-height: 74px;
+      padding: 11px 12px;
+      resize: vertical;
+      line-height: 1.55;
+    }
+
+    textarea::placeholder {
+      color: #9a9aa0;
+    }
+
+    .keyword-examples {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 2px;
+    }
+
+    .keyword-chip {
+      border: 1px solid rgba(0, 113, 227, 0.14);
+      border-radius: 999px;
+      height: 30px;
+      padding: 0 11px;
+      background: rgba(0, 113, 227, 0.07);
+      color: var(--blue);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 680;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: rgba(0, 113, 227, 0.58);
+      box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
+      background: #fff;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      padding: 4px;
+      background: rgba(0, 0, 0, 0.05);
+      border-radius: 13px;
+    }
+
+    .segment {
+      border: 0;
+      border-radius: 10px;
+      min-height: 34px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .segment.active {
+      background: #fff;
+      color: var(--text);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 12px;
+      min-height: 44px;
+      padding: 0 14px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 720;
+      transition: transform 0.12s, background 0.12s, opacity 0.12s;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+
+    .btn.primary {
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .btn.secondary {
+      background: rgba(0, 0, 0, 0.06);
+      color: var(--text);
+    }
+
+    .btn.full { grid-column: 1 / -1; }
+
+    details.advanced {
+      margin-top: 14px;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+      padding-top: 12px;
+    }
+
+    details.advanced summary {
+      cursor: pointer;
+      color: #3a3a3c;
+      font-size: 13px;
+      font-weight: 720;
+      list-style: none;
+    }
+
+    details.advanced summary::-webkit-details-marker { display: none; }
+
+    details.advanced summary::after {
+      content: "展开";
+      float: right;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    details.advanced[open] summary::after { content: "收起"; }
+
+    .advanced-body {
+      padding-top: 14px;
+    }
+
+    .preset-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .preset {
+      display: grid;
+      gap: 0;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      border-radius: 13px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .preset-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .blacklist-head {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .preset-summary {
+      min-width: 0;
+    }
+
+    .preset-summary strong {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 13px;
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .preset-summary span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .preset-editor {
+      display: grid;
+      gap: 9px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    .preset-editor[hidden] {
+      display: none;
+    }
+
+    .preset-name {
+      min-height: 34px;
+      font-size: 13px;
+      font-weight: 720;
+    }
+
+    .preset-keywords {
+      min-height: 92px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .preset-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .text-btn {
+      border: 0;
+      border-radius: 999px;
+      min-height: 28px;
+      padding: 0 10px;
+      background: rgba(0, 0, 0, 0.06);
+      color: #3a3a3c;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 720;
+      white-space: nowrap;
+    }
+
+    .text-btn.blue {
+      color: var(--blue);
+      background: var(--blue-soft);
+    }
+
+    .keyword-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .switch {
+      position: relative;
+      width: 42px;
+      height: 26px;
+      flex: 0 0 auto;
+    }
+
+    .switch input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .knob {
+      position: absolute;
+      inset: 0;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.14);
+      transition: background 0.15s;
+    }
+
+    .knob::after {
+      content: "";
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      left: 2px;
+      top: 2px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
+      transition: transform 0.15s;
+    }
+
+    .switch input:checked + .knob {
+      background: var(--blue);
+    }
+
+    .switch input:checked + .knob::after {
+      transform: translateX(16px);
+    }
+
+    .result-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 16px 18px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      background: rgba(255, 255, 255, 0.58);
+    }
+
+    .result-head h2 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .count {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .queries {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+    }
+
+    .query-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      border-radius: 15px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .query-main {
+      min-width: 0;
+    }
+
+    .query-main strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .query-main code {
+      display: block;
+      color: var(--muted);
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mini-btn {
+      border: 0;
+      border-radius: 999px;
+      height: 34px;
+      padding: 0 13px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    .mini-btn.ghost {
+      background: rgba(0, 0, 0, 0.06);
+      color: #3a3a3c;
+    }
+
+    .btn:disabled,
+    .mini-btn:disabled {
+      cursor: wait;
+      opacity: 0.58;
+      transform: none;
+    }
+
+    .opportunity-card {
+      display: grid;
+      gap: 10px;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      border-radius: 16px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.74);
+    }
+
+    .opportunity-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .opp-person {
+      min-width: 0;
+    }
+
+    .opp-person strong {
+      display: block;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .opp-person span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 44px;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .badge.must {
+      color: #fff;
+      background: #d92d20;
+    }
+
+    .badge.good {
+      color: #fff;
+      background: var(--blue);
+    }
+
+    .badge.watch {
+      color: #8a4b00;
+      background: rgba(191, 90, 0, 0.14);
+    }
+
+    .badge.skip {
+      color: var(--muted);
+      background: rgba(0, 0, 0, 0.06);
+    }
+
+    .opp-text {
+      margin: 0;
+      color: #242426;
+      font-size: 14px;
+      line-height: 1.62;
+      display: -webkit-box;
+      -webkit-line-clamp: 5;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .metric {
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.05);
+      color: #3a3a3c;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .opp-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .reply-box {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(0, 113, 227, 0.07);
+      border: 1px solid rgba(0, 113, 227, 0.14);
+    }
+
+    .reply-box[hidden] {
+      display: none;
+    }
+
+    .reply-box p {
+      margin: 0;
+      color: #1d1d1f;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .reply-box.error {
+      background: rgba(217, 45, 32, 0.07);
+      border-color: rgba(217, 45, 32, 0.14);
+    }
+
+    .scan-note {
+      margin: 0;
+      padding: 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .guide-card {
+      display: grid;
+      gap: 12px;
+      padding: 18px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    .guide-card h3 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.25;
+    }
+
+    .guide-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .guide-list {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .guide-item {
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.04);
+    }
+
+    .guide-item strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+
+    .guide-item span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .workflow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .step {
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.58);
+    }
+
+    .step b {
+      display: inline-grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      margin-bottom: 8px;
+      border-radius: 50%;
+      background: #111;
+      color: #fff;
+      font-size: 12px;
+    }
+
+    .step p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%) translateY(16px);
+      opacity: 0;
+      pointer-events: none;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(29, 29, 31, 0.9);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      transition: opacity 0.16s, transform 0.16s;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @media (max-width: 860px) {
+      .app {
+        width: min(100vw - 24px, 680px);
+        padding-top: 20px;
+      }
+
+      .topbar, .grid {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+
+      h1 { font-size: 28px; }
+      .status { width: fit-content; }
+      .workflow { grid-template-columns: 1fr 1fr; }
+      .guide-list { grid-template-columns: 1fr; }
+      .query-card { grid-template-columns: 1fr; }
+      .query-card .mini-btn { width: 100%; }
+      .opportunity-top { align-items: flex-start; }
+    }
+
+    @media (max-width: 520px) {
+      .row, .actions, .workflow {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <h1>X 热点雷达</h1>
+        <p class="subtitle">输入关键词，一键扫描 X 热点，优先看值得回复的帖子。</p>
+      </div>
+      <div class="status">Chrome 已授权</div>
+    </header>
+
+    <section class="grid">
+      <aside class="panel">
+        <div class="panel-inner">
+          <div class="panel-title">
+            <h2>开始扫描</h2>
+            <span class="quiet" id="todayText"></span>
+          </div>
+
+          <div class="quick-guide">
+            <div class="quick-step"><b>1</b><div><strong>选领域</strong><span>下面的关键词组默认已经打开，够日常使用。</span></div></div>
+            <div class="quick-step"><b>2</b><div><strong>补关键词</strong><span>有临时热点时，一行写一个关键词。</span></div></div>
+            <div class="quick-step"><b>3</b><div><strong>找机会</strong><span>系统会优先排出值得去评论区借曝光的帖子。</span></div></div>
+          </div>
+
+          <div class="field">
+            <label for="customKeywords">临时关键词</label>
+            <textarea id="customKeywords" placeholder="一行一个关键词"></textarea>
+            <div class="keyword-examples" aria-label="临时关键词示例">
+              <button class="keyword-chip" type="button" data-keyword-example="同声传译">同声传译</button>
+              <button class="keyword-chip" type="button" data-keyword-example="AI 交付">AI 交付</button>
+              <button class="keyword-chip" type="button" data-keyword-example="Temu 商品图">Temu 商品图</button>
+            </div>
+            <span class="quiet">不知道填什么就留空，直接用下面的默认关键词组。</span>
+          </div>
+
+          <div class="actions">
+            <button class="btn primary full" type="button" id="surfBtn">找回复机会</button>
+          </div>
+
+          <details class="advanced">
+            <summary>高级筛选</summary>
+            <div class="advanced-body">
+              <div class="field">
+                <label>结果类型</label>
+                <div class="segmented" role="tablist">
+                  <button class="segment active" data-filter="live" type="button">Latest</button>
+                  <button class="segment" data-filter="top" type="button">Top</button>
+                  <button class="segment" data-filter="people" type="button">People</button>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="field">
+                  <label for="sinceInput">起始日期</label>
+                  <input id="sinceInput" type="date">
+                </div>
+                <div class="field">
+                  <label for="minFavInput">最低点赞</label>
+                  <input id="minFavInput" type="number" min="0" step="10" value="20">
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="field">
+                  <label for="langInput">语言</label>
+                  <select id="langInput">
+                    <option value="zh">中文</option>
+                    <option value="en">英文</option>
+                    <option value="">不限</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="excludeInput">排除</label>
+                  <select id="excludeInput">
+                    <option value="-filter:replies">排除回复</option>
+                    <option value="-is:retweet">排除转帖</option>
+                    <option value="-filter:replies -is:retweet">排除回复和转帖</option>
+                    <option value="">不排除</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="scrollInput">每词滚动次数</label>
+                <input id="scrollInput" type="number" min="1" max="10" step="1" value="4">
+              </div>
+
+              <div class="actions">
+                <button class="btn secondary" type="button" id="showQueueBtn">查看搜索队列</button>
+                <button class="btn secondary" type="button" id="copyAllBtn">复制队列</button>
+                <button class="btn secondary" type="button" id="openNextBtn">打开下一条</button>
+                <button class="btn secondary" type="button" id="resetBtn">恢复默认</button>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div class="panel-inner" style="border-top: 1px solid rgba(0,0,0,0.06);">
+          <div class="panel-title">
+            <h2>黑名单</h2>
+            <span class="quiet" id="blacklistSavedText"></span>
+          </div>
+          <div class="preset">
+            <div class="preset-head blacklist-head">
+              <div class="preset-summary">
+                <strong id="blacklistSummaryTitle">0 条规则</strong>
+                <span id="blacklistSummaryPreview">不会过滤任何账号</span>
+              </div>
+              <button class="text-btn" type="button" id="blacklistEditBtn">编辑</button>
+            </div>
+            <div class="preset-editor" id="blacklistEditor" hidden>
+              <div class="field" style="margin-bottom: 0;">
+                <label for="blacklistInput">规则</label>
+                <textarea id="blacklistInput" placeholder="一行一个规则，例如：&#10;@some_handle&#10;某个昵称"></textarea>
+              </div>
+              <div class="preset-actions">
+                <span class="quiet">昵称或 @handle 任选一个即可，自动保存。</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-inner" style="border-top: 1px solid rgba(0,0,0,0.06);">
+          <div class="panel-title">
+            <h2>关键词组</h2>
+            <div class="keyword-toolbar">
+              <span class="quiet" id="presetSavedText"></span>
+              <button class="text-btn blue" type="button" id="addPresetBtn">新增组</button>
+            </div>
+          </div>
+          <div class="preset-list" id="presetList"></div>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <div class="result-head">
+          <h2 id="resultTitle">怎么用</h2>
+          <span class="count" id="countText"></span>
+        </div>
+        <div class="queries" id="queryList"></div>
+      </section>
+    </section>
+
+  </main>
+
+  <div class="toast" id="toast">已复制</div>
+
+  <script>
+    const STORAGE_KEY = 'xRadarSettings.v1';
+    const DEFAULT_BLACKLIST = '';
+    const defaultPresets = [
+      {
+        id: 'zh-ai',
+        name: '中文 AI 圈',
+        hint: 'AI / Claude / Codex / Agent',
+        enabled: true,
+        keywords: ['AI', 'Claude', 'Codex', 'ChatGPT', 'AI agent', 'Agent', 'Grok', 'Gemini', 'Cursor']
+      },
+      {
+        id: 'zh-business',
+        name: '接单与赚钱',
+        hint: '接单 / 独立开发 / AI赚钱',
+        enabled: true,
+        keywords: ['接单', '独立开发', 'AI赚钱', 'AI副业', 'AI产品', 'AI工具', '自动化', '工作流', 'SaaS']
+      },
+      {
+        id: 'cross-border',
+        name: '出海与电商',
+        hint: 'Temu / 出海 / 电商主图',
+        enabled: true,
+        keywords: ['出海', 'Temu', '跨境电商', '电商主图', '商品图生成', 'Shopify']
+      },
+      {
+        id: 'en-ai',
+        name: '海外 AI 产品',
+        hint: 'OpenAI / Anthropic / coding agents',
+        enabled: false,
+        keywords: ['OpenAI', 'Anthropic', 'Claude Code', 'coding agent', 'AI agent', 'Cursor', 'Lovable', 'Replit', 'Perplexity']
+      }
+    ];
+
+    const els = {
+      todayText: document.getElementById('todayText'),
+      sinceInput: document.getElementById('sinceInput'),
+      minFavInput: document.getElementById('minFavInput'),
+      langInput: document.getElementById('langInput'),
+      excludeInput: document.getElementById('excludeInput'),
+      customKeywords: document.getElementById('customKeywords'),
+      blacklistInput: document.getElementById('blacklistInput'),
+      blacklistEditor: document.getElementById('blacklistEditor'),
+      blacklistEditBtn: document.getElementById('blacklistEditBtn'),
+      blacklistSummaryTitle: document.getElementById('blacklistSummaryTitle'),
+      blacklistSummaryPreview: document.getElementById('blacklistSummaryPreview'),
+      blacklistSavedText: document.getElementById('blacklistSavedText'),
+      keywordExamples: document.querySelectorAll('[data-keyword-example]'),
+      presetList: document.getElementById('presetList'),
+      presetSavedText: document.getElementById('presetSavedText'),
+      queryList: document.getElementById('queryList'),
+      resultTitle: document.getElementById('resultTitle'),
+      countText: document.getElementById('countText'),
+      scrollInput: document.getElementById('scrollInput'),
+      addPresetBtn: document.getElementById('addPresetBtn'),
+      showQueueBtn: document.getElementById('showQueueBtn'),
+      copyAllBtn: document.getElementById('copyAllBtn'),
+      openNextBtn: document.getElementById('openNextBtn'),
+      resetBtn: document.getElementById('resetBtn'),
+      surfBtn: document.getElementById('surfBtn'),
+      toast: document.getElementById('toast')
+    };
+
+    let state = loadState();
+    let activeFilter = state.filter || 'live';
+    let nextIndex = 0;
+    let currentView = 'guide';
+    let savedTimer = 0;
+    let blacklistTimer = 0;
+    let editingBlacklist = false;
+    const editingPresets = new Set();
+
+    function getLocalDate(daysAgo = 0) {
+      const d = new Date();
+      d.setDate(d.getDate() - daysAgo);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function loadState() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        return {
+          since: saved.since || getLocalDate(1),
+          minFav: saved.minFav ?? 20,
+          lang: saved.lang ?? 'zh',
+          exclude: saved.exclude ?? '-filter:replies',
+          filter: saved.filter || 'live',
+          custom: saved.custom || '',
+          blacklist: normalizeBlacklistText(saved.blacklist ?? DEFAULT_BLACKLIST),
+          scrolls: saved.scrolls ?? 4,
+          presets: normalizePresets(saved.presets, saved.enabled)
+        };
+      } catch (_) {
+        return {
+          since: getLocalDate(1),
+          minFav: 20,
+          lang: 'zh',
+          exclude: '-filter:replies',
+          filter: 'live',
+          custom: '',
+          blacklist: DEFAULT_BLACKLIST,
+          scrolls: 4,
+          presets: normalizePresets()
+        };
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function normalizeBlacklistText(value) {
+      return String(value || '').trim();
+    }
+
+    function markSaved(text = '已保存') {
+      els.presetSavedText.textContent = text;
+      clearTimeout(savedTimer);
+      savedTimer = setTimeout(() => {
+        els.presetSavedText.textContent = '';
+      }, 1500);
+    }
+
+    function markBlacklistSaved() {
+      els.blacklistSavedText.textContent = '已保存';
+      clearTimeout(blacklistTimer);
+      blacklistTimer = setTimeout(() => {
+        els.blacklistSavedText.textContent = '';
+      }, 1500);
+    }
+
+    function uniq(items) {
+      const seen = new Set();
+      return items.filter((item) => {
+        const key = item.trim().toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+
+    function normalizePresets(savedPresets, savedEnabled) {
+      const source = Array.isArray(savedPresets) && savedPresets.length ? savedPresets : defaultPresets;
+      return source.map((preset, index) => {
+        const id = String(preset.id || `custom-${index}-${Date.now()}`);
+        const fallback = defaultPresets.find((item) => item.id === id);
+        return {
+          id,
+          name: String(preset.name || fallback?.name || '关键词组'),
+          hint: String(preset.hint || fallback?.hint || ''),
+          enabled: typeof preset.enabled === 'boolean' ? preset.enabled : savedEnabled?.[id] ?? fallback?.enabled ?? true,
+          keywords: parseKeywords(Array.isArray(preset.keywords) ? preset.keywords.join('\n') : preset.keywords || fallback?.keywords || '')
+        };
+      });
+    }
+
+    function parseKeywords(value) {
+      if (Array.isArray(value)) return uniq(value.map((item) => String(item).trim()).filter(Boolean));
+      return uniq(String(value || '')
+        .split(/\n|,|，/)
+        .map((item) => item.trim())
+        .filter(Boolean));
+    }
+
+    function getKeywords() {
+      const presetKeywords = state.presets
+        .filter((preset) => preset.enabled)
+        .flatMap((preset) => preset.keywords);
+      const custom = state.custom.split('\n').map((v) => v.trim()).filter(Boolean);
+      return uniq([...presetKeywords, ...custom]);
+    }
+
+    function getBlacklistTerms() {
+      return uniq(String(state.blacklist || '')
+        .split(/\n|,|，/)
+        .map((item) => item.trim())
+        .filter(Boolean));
+    }
+
+    function quoteIfNeeded(keyword) {
+      const value = keyword.trim();
+      if (!value) return '';
+      if (/^".*"$/.test(value)) return value;
+      return /\s/.test(value) ? `"${value}"` : value;
+    }
+
+    function buildQuery(keyword) {
+      const parts = [quoteIfNeeded(keyword)];
+      if (activeFilter === 'people') return parts.filter(Boolean).join(' ');
+      if (state.lang) parts.push(`lang:${state.lang}`);
+      if (Number(state.minFav) > 0) parts.push(`min_faves:${Number(state.minFav)}`);
+      if (state.since) parts.push(`since:${state.since}`);
+      if (state.exclude) parts.push(state.exclude);
+      return parts.filter(Boolean).join(' ');
+    }
+
+    function buildUrl(query) {
+      const filter = activeFilter === 'top' ? '&f=top' : activeFilter === 'people' ? '&f=user' : '&f=live';
+      return `https://x.com/search?q=${encodeURIComponent(query)}&src=typed_query${filter}`;
+    }
+
+    function getFilterLabel() {
+      if (activeFilter === 'top') return 'Top';
+      if (activeFilter === 'people') return 'People';
+      return 'Latest';
+    }
+
+    function getRows() {
+      return getKeywords().map((keyword) => {
+        const query = buildQuery(keyword);
+        return { keyword, query, url: buildUrl(query), mode: getFilterLabel() };
+      });
+    }
+
+    function renderPresets() {
+      els.presetList.innerHTML = state.presets.map((preset) => {
+        const isEditing = editingPresets.has(preset.id);
+        const preview = preset.keywords.slice(0, 4).join(' / ');
+        return `
+        <div class="preset">
+          <div class="preset-head">
+            <div class="preset-summary">
+              <strong>${escapeHtml(preset.name)}</strong>
+              <span>${preset.keywords.length} 个关键词${preview ? ` · ${escapeHtml(preview)}` : ''}</span>
+            </div>
+            <label class="switch" aria-label="${escapeHtml(preset.name)}">
+              <input type="checkbox" data-preset-toggle="${escapeHtml(preset.id)}" ${preset.enabled ? 'checked' : ''}>
+              <span class="knob"></span>
+            </label>
+            <button class="text-btn" type="button" data-preset-edit="${escapeHtml(preset.id)}">${isEditing ? '收起' : '编辑'}</button>
+          </div>
+          <div class="preset-editor" ${isEditing ? '' : 'hidden'}>
+            <div class="field" style="margin-bottom: 0;">
+              <label>组名</label>
+              <input class="preset-name" data-preset-name="${escapeHtml(preset.id)}" value="${escapeHtml(preset.name)}" aria-label="词组名称">
+            </div>
+            <div class="field" style="margin-bottom: 0;">
+              <label>关键词</label>
+              <textarea class="preset-keywords" data-preset-keywords="${escapeHtml(preset.id)}" aria-label="${escapeHtml(preset.name)}关键词">${escapeHtml(preset.keywords.join('\n'))}</textarea>
+            </div>
+            <div class="preset-actions">
+              <span class="quiet">一行一个关键词，自动保存</span>
+              <button class="text-btn" type="button" data-preset-delete="${escapeHtml(preset.id)}">删除</button>
+            </div>
+          </div>
+        </div>
+      `;
+      }).join('');
+      els.presetList.querySelectorAll('input[data-preset-toggle]').forEach((input) => {
+        input.addEventListener('change', () => {
+          const preset = findPreset(input.dataset.presetToggle);
+          if (!preset) return;
+          preset.enabled = input.checked;
+          saveState();
+          markSaved();
+          nextIndex = 0;
+          refreshCurrentView();
+        });
+      });
+      els.presetList.querySelectorAll('[data-preset-edit]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const id = button.dataset.presetEdit;
+          if (editingPresets.has(id)) editingPresets.delete(id);
+          else editingPresets.add(id);
+          renderPresets();
+        });
+      });
+      els.presetList.querySelectorAll('[data-preset-name]').forEach((input) => {
+        input.addEventListener('input', () => {
+          const preset = findPreset(input.dataset.presetName);
+          if (!preset) return;
+          preset.name = input.value.trim() || '关键词组';
+          saveState();
+          markSaved();
+          refreshCurrentView();
+        });
+      });
+      els.presetList.querySelectorAll('[data-preset-keywords]').forEach((textarea) => {
+        textarea.addEventListener('input', () => {
+          const preset = findPreset(textarea.dataset.presetKeywords);
+          if (!preset) return;
+          preset.keywords = parseKeywords(textarea.value);
+          saveState();
+          markSaved();
+          nextIndex = 0;
+          refreshCurrentView();
+        });
+      });
+      els.presetList.querySelectorAll('[data-preset-delete]').forEach((button) => {
+        button.addEventListener('click', () => {
+          if (state.presets.length <= 1) {
+            showToast('至少保留一个关键词组');
+            return;
+          }
+          state.presets = state.presets.filter((preset) => preset.id !== button.dataset.presetDelete);
+          editingPresets.delete(button.dataset.presetDelete);
+          saveState();
+          markSaved('已删除');
+          showToast('已删除并保存');
+          nextIndex = 0;
+          renderPresets();
+          refreshCurrentView();
+        });
+      });
+    }
+
+    function renderBlacklist() {
+      const terms = getBlacklistTerms();
+      els.blacklistSummaryTitle.textContent = terms.length ? `${terms.length} 条规则` : '未设置黑名单';
+      els.blacklistSummaryPreview.textContent = terms.length ? terms.slice(0, 4).join(' / ') : '不会过滤任何账号';
+      els.blacklistEditBtn.textContent = editingBlacklist ? '收起' : '编辑';
+      els.blacklistEditor.hidden = !editingBlacklist;
+    }
+
+    function findPreset(id) {
+      return state.presets.find((preset) => preset.id === id);
+    }
+
+    function renderQueries() {
+      const rows = getRows();
+      currentView = 'queue';
+      els.resultTitle.textContent = '搜索队列';
+      els.countText.textContent = `${rows.length} 条搜索 · ${getFilterLabel()}`;
+      els.queryList.innerHTML = rows.map((row, index) => `
+        <article class="query-card">
+          <div class="query-main">
+            <strong>${index + 1}. ${escapeHtml(row.keyword)}</strong>
+            <code>${escapeHtml(row.query)} · 模式：${escapeHtml(row.mode)}</code>
+          </div>
+          <button class="mini-btn" type="button" data-open="${index}">打开</button>
+          <button class="mini-btn ghost" type="button" data-copy="${index}">复制</button>
+        </article>
+      `).join('');
+
+      els.queryList.querySelectorAll('[data-open]').forEach((btn) => {
+        btn.addEventListener('click', () => openRow(Number(btn.dataset.open)));
+      });
+      els.queryList.querySelectorAll('[data-copy]').forEach((btn) => {
+        btn.addEventListener('click', () => copyText(rows[Number(btn.dataset.copy)].query));
+      });
+    }
+
+    function renderGuide() {
+      currentView = 'guide';
+      const rows = getRows();
+      els.resultTitle.textContent = '怎么用';
+      els.countText.textContent = '';
+      els.queryList.innerHTML = `
+        <article class="guide-card">
+          <h3>最简单的用法</h3>
+          <p>日常直接点「找回复机会」。它会优先排出适合去评论区借曝光的帖子。</p>
+          <div class="guide-list">
+            <div class="guide-item">
+              <strong>必回</strong>
+              <span>领域相关，而且流速很快。打开原帖，认真写评论。</span>
+            </div>
+            <div class="guide-item">
+              <strong>可回</strong>
+              <span>值得看，有机会借到流量。时间不多时只看这类。</span>
+            </div>
+            <div class="guide-item">
+              <strong>生成回复</strong>
+              <span>调用本地 Claude Code 出草稿，你再按语境微调。</span>
+            </div>
+          </div>
+          <p>如果某天你想追一个具体话题，比如「同声传译」或「Temu 商品图」，把它写进左侧临时关键词，再扫描。</p>
+        </article>
+      `;
+    }
+
+    function refreshCurrentView() {
+      if (currentView === 'queue') renderQueries();
+      else if (currentView === 'guide') renderGuide();
+    }
+
+    function openRow(index) {
+      const rows = getRows();
+      const row = rows[index];
+      if (!row) return;
+      nextIndex = (index + 1) % rows.length;
+      window.open(row.url, '_blank', 'noopener,noreferrer');
+    }
+
+    function bindSettings() {
+      els.todayText.textContent = getLocalDate(0);
+      els.sinceInput.value = state.since;
+      els.minFavInput.value = state.minFav;
+      els.langInput.value = state.lang;
+      els.excludeInput.value = state.exclude;
+      els.customKeywords.value = state.custom;
+      els.blacklistInput.value = state.blacklist;
+      els.scrollInput.value = state.scrolls;
+      renderBlacklist();
+
+      document.querySelectorAll('.segment').forEach((button) => {
+        button.classList.toggle('active', button.dataset.filter === activeFilter);
+        button.addEventListener('click', () => {
+          activeFilter = button.dataset.filter;
+          state.filter = activeFilter;
+          saveState();
+          document.querySelectorAll('.segment').forEach((b) => b.classList.toggle('active', b === button));
+          nextIndex = 0;
+          refreshCurrentView();
+        });
+      });
+
+      [
+        ['since', els.sinceInput],
+        ['minFav', els.minFavInput],
+        ['lang', els.langInput],
+        ['exclude', els.excludeInput],
+        ['scrolls', els.scrollInput]
+      ].forEach(([key, el]) => {
+        el.addEventListener('input', () => {
+          state[key] = el.value;
+          saveState();
+          nextIndex = 0;
+          refreshCurrentView();
+        });
+      });
+
+      els.customKeywords.addEventListener('input', () => {
+        state.custom = els.customKeywords.value;
+        saveState();
+        nextIndex = 0;
+        refreshCurrentView();
+      });
+
+      els.blacklistInput.addEventListener('input', () => {
+        state.blacklist = els.blacklistInput.value;
+        saveState();
+        markBlacklistSaved();
+        renderBlacklist();
+      });
+
+      els.blacklistEditBtn.addEventListener('click', () => {
+        editingBlacklist = !editingBlacklist;
+        renderBlacklist();
+      });
+
+      els.keywordExamples.forEach((button) => {
+        button.addEventListener('click', () => addTemporaryKeyword(button.dataset.keywordExample));
+      });
+
+      els.surfBtn.addEventListener('click', () => scanRadar('replySurf'));
+
+      els.addPresetBtn.addEventListener('click', () => {
+        const id = `custom-${Date.now().toString(36)}`;
+        state.presets.push({
+          id,
+          name: '新关键词组',
+          hint: '',
+          enabled: true,
+          keywords: ['新关键词']
+        });
+        editingPresets.add(id);
+        saveState();
+        markSaved('已新增');
+        showToast('已新增并保存');
+        renderPresets();
+        refreshCurrentView();
+      });
+
+      els.showQueueBtn.addEventListener('click', renderQueries);
+
+      els.openNextBtn.addEventListener('click', () => {
+        const rows = getRows();
+        if (!rows.length) return;
+        openRow(nextIndex);
+      });
+
+      els.copyAllBtn.addEventListener('click', () => {
+        const text = getRows().map((row) => row.query).join('\n');
+        copyText(text);
+      });
+
+      els.resetBtn.addEventListener('click', () => {
+        localStorage.removeItem(STORAGE_KEY);
+        state = loadState();
+        activeFilter = state.filter;
+        nextIndex = 0;
+        editingPresets.clear();
+        bindFreshValues();
+        renderPresets();
+        renderGuide();
+        showToast('已恢复默认');
+      });
+    }
+
+    function bindFreshValues() {
+      els.sinceInput.value = state.since;
+      els.minFavInput.value = state.minFav;
+      els.langInput.value = state.lang;
+      els.excludeInput.value = state.exclude;
+      els.customKeywords.value = state.custom;
+      els.blacklistInput.value = state.blacklist;
+      els.scrollInput.value = state.scrolls;
+      editingBlacklist = false;
+      renderBlacklist();
+      document.querySelectorAll('.segment').forEach((button) => {
+        button.classList.toggle('active', button.dataset.filter === activeFilter);
+      });
+    }
+
+    function addTemporaryKeyword(keyword) {
+      const value = String(keyword || '').trim();
+      if (!value) return;
+      const lines = state.custom.split('\n').map((line) => line.trim()).filter(Boolean);
+      if (!lines.some((line) => line.toLowerCase() === value.toLowerCase())) {
+        lines.push(value);
+      }
+      state.custom = lines.join('\n');
+      els.customKeywords.value = state.custom;
+      saveState();
+      nextIndex = 0;
+      refreshCurrentView();
+    }
+
+    async function scanRadar(strategy = 'replySurf') {
+      if (window.location.protocol === 'file:') {
+        showToast('请用 http://127.0.0.1:8787 打开');
+        return;
+      }
+
+      const keywords = getKeywords();
+      if (!keywords.length) {
+        showToast('先输入关键词');
+        return;
+      }
+
+      const payload = {
+        keywords,
+        limit: keywords.length,
+        scrolls: Number(state.scrolls) || 4,
+        lang: state.lang,
+        minFav: Number(state.minFav) || 0,
+        since: state.since,
+        exclude: state.exclude,
+        blacklist: getBlacklistTerms(),
+        filter: activeFilter,
+        strategy
+      };
+
+      currentView = 'results';
+      els.surfBtn.disabled = true;
+      els.surfBtn.textContent = '寻找中';
+      els.resultTitle.textContent = '自动扫描结果';
+      els.countText.textContent = '';
+      els.queryList.innerHTML = '<p class="scan-note">正在找起量贴，优先筛出适合去大 V 评论区回复的机会。</p>';
+
+      try {
+        const response = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || `扫描失败：${response.status}`);
+        }
+        renderOpportunities(data.results || [], data.scanned || [], data.filteredCount || 0, strategy, data.safetyFilteredCount || 0);
+      } catch (error) {
+        els.countText.textContent = '扫描失败';
+        els.queryList.innerHTML = `
+          <p class="scan-note">
+            ${escapeHtml(error.message || String(error))}<br>
+            如果这里是 Failed to fetch，大概率是当前页面用 file:// 打开了，或者本地服务没有启动。
+          </p>
+        `;
+      } finally {
+        els.surfBtn.disabled = false;
+        els.surfBtn.textContent = '找回复机会';
+      }
+    }
+
+    function renderOpportunities(results, scanned, filteredCount = 0, strategy = 'default', safetyFilteredCount = 0) {
+      currentView = 'results';
+      const useful = results.filter((item) => item.label !== '略过').length;
+      els.countText.textContent = strategy === 'replySurf'
+        ? `${results.length} 个回复机会 · ${useful} 个优先`
+        : `${results.length} 条帖子 · ${useful} 条可看`;
+
+      const scanSummary = scanned.map((item) => {
+        const suffix = item.error ? `失败：${item.error}` : `${item.count} 条`;
+        return `${item.keyword} ${suffix}`;
+      }).join(' · ');
+      const blacklistSummary = filteredCount ? ` · 黑名单已过滤 ${filteredCount} 条` : '';
+      const safetySummary = safetyFilteredCount ? ` · 敏感内容已过滤 ${safetyFilteredCount} 条` : '';
+
+      if (!results.length) {
+        els.queryList.innerHTML = `
+          <p class="scan-note">
+            没扫到符合条件的帖子。可以降低最低点赞、把结果类型切回 Latest，或者减少排除条件。<br>
+            本次扫描：${escapeHtml(scanSummary || '无结果')}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}
+          </p>
+        `;
+        return;
+      }
+
+      els.queryList.innerHTML = `
+        <p class="scan-note">${strategy === 'replySurf' ? '找回复机会：优先看热度分高、流量池大、领域相关的帖子。' : '本次扫描：'}${escapeHtml(scanSummary)}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}</p>
+        ${results.map((item, index) => renderOpportunityCard(item, index)).join('')}
+      `;
+
+      els.queryList.querySelectorAll('[data-open-url]').forEach((button) => {
+        button.addEventListener('click', () => window.open(button.dataset.openUrl, '_blank', 'noopener,noreferrer'));
+      });
+      els.queryList.querySelectorAll('[data-copy-reply]').forEach((button) => {
+        const item = results[Number(button.dataset.copyReply)];
+        button.addEventListener('click', () => copyText(buildReplyPrompt(item)));
+      });
+      els.queryList.querySelectorAll('[data-generate-reply]').forEach((button) => {
+        const item = results[Number(button.dataset.generateReply)];
+        button.addEventListener('click', () => generateReply(item, button));
+      });
+    }
+
+    function renderOpportunityCard(item, index) {
+      const keywords = item.keywords?.length ? item.keywords.join(' / ') : item.keyword || '';
+      const author = [item.author, item.handle].filter(Boolean).join(' ');
+      return `
+        <article class="opportunity-card">
+          <div class="opportunity-top">
+            <div class="opp-person">
+              <strong>${index + 1}. ${escapeHtml(author || '未知作者')}</strong>
+              <span>关键词：${escapeHtml(keywords)} · 相关度 ${Number(item.relevance || 0)} · 互动率 ${formatPercent(item.engagementRate)}</span>
+            </div>
+            <span class="badge ${labelClass(item.label)}">${escapeHtml(item.label)}</span>
+          </div>
+          <p class="opp-text">${escapeHtml(item.text || '')}</p>
+          <div class="metrics">
+            <span class="metric">热度 ${escapeHtml(item.hotScore ?? 0)}</span>
+            <span class="metric">${escapeHtml(item.trafficPool || '流量池未知')}</span>
+            <span class="metric">浏览 ${escapeHtml(item.viewsText || item.views || 0)}</span>
+            <span class="metric">流速 ${escapeHtml(item.velocityText || '0/h')}</span>
+            <span class="metric">赞 ${escapeHtml(item.likes || 0)}</span>
+            <span class="metric">转 ${escapeHtml(item.reposts || 0)}</span>
+            <span class="metric">评 ${escapeHtml(item.replies || 0)}</span>
+          </div>
+          <p class="quiet">建议：${escapeHtml(item.replyHint || '看语境后再回复')}</p>
+          <div class="opp-actions">
+            <button class="mini-btn" type="button" data-open-url="${escapeHtml(item.url || '')}">打开原帖</button>
+            <button class="mini-btn" type="button" data-generate-reply="${index}">生成回复</button>
+            <button class="mini-btn ghost" type="button" data-copy-reply="${index}">复制提示</button>
+          </div>
+          <div class="reply-box" id="replyBox-${index}" hidden></div>
+        </article>
+      `;
+    }
+
+    function labelClass(label) {
+      if (label === '必回') return 'must';
+      if (label === '可回') return 'good';
+      if (label === '看看') return 'watch';
+      return 'skip';
+    }
+
+    function formatPercent(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n) || n <= 0) return '0%';
+      return `${(n * 100).toFixed(1)}%`;
+    }
+
+    function buildReplyPrompt(item) {
+      return [
+        '帮我给这条 X 写一条高质量回复。',
+        '要求：中文，像真人，不要客套，不要营销腔；最好补充一个具体观点、经验或反例。',
+        `原帖作者：${[item.author, item.handle].filter(Boolean).join(' ')}`,
+        `原帖链接：${item.url}`,
+        `原帖内容：${item.text}`
+      ].join('\n');
+    }
+
+    async function generateReply(item, button) {
+      const box = document.getElementById(`replyBox-${button.dataset.generateReply}`);
+      if (!box) return;
+
+      button.disabled = true;
+      button.textContent = '生成中';
+      box.hidden = false;
+      box.classList.remove('error');
+      box.innerHTML = '<p>正在调用 Claude Code...</p>';
+
+      try {
+        const response = await fetch('/api/reply', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            author: item.author,
+            handle: item.handle,
+            url: item.url,
+            keyword: item.keyword,
+            keywords: item.keywords?.join(' / ') || item.keyword || '',
+            text: item.text
+          })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || `生成失败：${response.status}`);
+        }
+        box.innerHTML = `
+          <p>${escapeHtml(data.reply)}</p>
+          <div class="opp-actions">
+            <button class="mini-btn" type="button" data-copy-generated>复制回复</button>
+          </div>
+        `;
+        box.querySelector('[data-copy-generated]').addEventListener('click', () => copyText(data.reply));
+      } catch (error) {
+        box.classList.add('error');
+        box.innerHTML = `
+          <p>${escapeHtml(error.message || String(error))}</p>
+          <div class="opp-actions">
+            <button class="mini-btn ghost" type="button" data-copy-fallback>复制提示</button>
+          </div>
+        `;
+        box.querySelector('[data-copy-fallback]').addEventListener('click', () => copyText(buildReplyPrompt(item)));
+      } finally {
+        button.disabled = false;
+        button.textContent = '重新生成';
+      }
+    }
+
+    async function copyText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('已复制');
+      } catch (_) {
+        const area = document.createElement('textarea');
+        area.value = text;
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        area.remove();
+        showToast('已复制');
+      }
+    }
+
+    let toastTimer = 0;
+    function showToast(text) {
+      els.toast.textContent = text;
+      els.toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => els.toast.classList.remove('show'), 1400);
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[char]));
+    }
+
+    bindSettings();
+    renderPresets();
+    renderGuide();
+  </script>
+</body>
+</html>
