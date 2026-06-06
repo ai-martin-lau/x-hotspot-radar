@@ -10,6 +10,8 @@ const PORT = Number(process.env.PORT || 8787);
 const CDP_PROXY_URL = process.env.CDP_PROXY_URL || '';
 const CHROME_DEBUG_URL = process.env.CHROME_DEBUG_URL || `http://127.0.0.1:${process.env.CHROME_DEBUG_PORT || 9222}`;
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
+// Opus 高峰会被限流，一条短回复可能要几分钟，给足 5 分钟避免误判超时
+const CLAUDE_TIMEOUT_MS = Number(process.env.CLAUDE_TIMEOUT_MS) || 300000;
 
 const DOMAIN_TERMS = [
   'AI', 'ChatGPT', 'Claude', 'Codex', 'OpenAI', 'Anthropic', 'Agent', 'Grok', 'Gemini', 'Cursor',
@@ -386,7 +388,12 @@ const EXTRACT_SCRIPT = String.raw`
   }
   return [...document.querySelectorAll('article[data-testid="tweet"], article')].map((article) => {
     const links = [...article.querySelectorAll('a[href*="/status/"]')];
-    const statusLink = links.find((a) => /\/status\/\d+/.test(a.getAttribute('href') || ''));
+    // 优先用主贴时间戳的永久链接(<time> 外层的 a)，它一定指向主贴本身，
+    // 避免引用帖(QRT)把链接带到被引用的那条
+    const timeLink = article.querySelector('time')?.closest('a[href*="/status/"]');
+    const statusLink = (timeLink && /\/status\/\d+/.test(timeLink.getAttribute('href') || ''))
+      ? timeLink
+      : links.find((a) => /\/status\/\d+/.test(a.getAttribute('href') || ''));
     if (!statusLink) return null;
     const href = statusLink.href.split('?')[0];
     const id = (href.match(/\/status\/(\d+)/) || [])[1] || '';
@@ -713,7 +720,7 @@ function runClaude(prompt) {
     const timer = setTimeout(() => {
       child.kill('SIGTERM');
       reject(new Error('Claude 生成超时'));
-    }, 90000);
+    }, CLAUDE_TIMEOUT_MS);
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
@@ -748,8 +755,16 @@ async function handleReply(req, res) {
     return;
   }
 
+  const prompt = buildClaudeReplyPrompt(payload);
   try {
-    const reply = await runClaude(buildClaudeReplyPrompt(payload));
+    let reply;
+    try {
+      reply = await runClaude(prompt);
+    } catch (firstError) {
+      // 只对「快速失败」自动重试一次；超时不再重试，避免叠成两个 5 分钟
+      if (firstError.message === 'Claude 生成超时') throw firstError;
+      reply = await runClaude(prompt);
+    }
     sendJson(res, { ok: true, provider: 'claude', reply });
   } catch (error) {
     sendJson(res, { ok: false, error: error.message || String(error) }, 500);
