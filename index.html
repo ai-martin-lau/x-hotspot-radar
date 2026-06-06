@@ -625,11 +625,32 @@
       margin: 0;
       color: #242426;
       font-size: 14px;
-      line-height: 1.62;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+
+    .opp-text.clamped {
       display: -webkit-box;
-      -webkit-line-clamp: 5;
+      -webkit-line-clamp: 6;
       -webkit-box-orient: vertical;
       overflow: hidden;
+    }
+
+    .opp-toggle {
+      align-self: flex-start;
+      margin: -4px 0 0;
+      padding: 0;
+      background: none;
+      border: none;
+      color: var(--accent, #0071e3);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .opp-toggle[hidden] {
+      display: none;
     }
 
     .metrics {
@@ -671,6 +692,27 @@
       color: #1d1d1f;
       font-size: 14px;
       line-height: 1.65;
+    }
+
+    .reply-edit {
+      width: 100%;
+      min-height: 84px;
+      resize: vertical;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(0, 113, 227, 0.24);
+      background: #fff;
+      color: #1d1d1f;
+      font-size: 14px;
+      line-height: 1.65;
+      font-family: inherit;
+    }
+
+    .reply-count {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
     }
 
     .reply-box.error {
@@ -1572,6 +1614,42 @@
       els.queryList.querySelectorAll('[data-open-url]').forEach((button) => {
         button.addEventListener('click', () => window.open(button.dataset.openUrl, '_blank', 'noopener,noreferrer'));
       });
+      els.queryList.querySelectorAll('.opportunity-card').forEach((card, i) => {
+        const textEl = card.querySelector('[data-opp-text]');
+        const toggle = card.querySelector('[data-opp-toggle]');
+        if (!textEl || !toggle) return;
+        const item = results[i];
+        const truncated = !!(item && item.truncated && item.url);
+        // 被 X 折叠(truncated)或纯排版超长(overflow)时，显示「展开全文」
+        if (truncated || textEl.scrollHeight - textEl.clientHeight > 4) {
+          toggle.hidden = false;
+        }
+        let hydrated = false;
+        toggle.addEventListener('click', async () => {
+          const expanding = textEl.classList.contains('clamped');
+          // 第一次展开且这条是被 X 截断的 → 去原帖抓全文补回来
+          if (expanding && truncated && !hydrated) {
+            toggle.disabled = true;
+            const old = toggle.textContent;
+            toggle.textContent = '抓全文…';
+            try {
+              const full = await hydratePostText(item);
+              if (full && full.text && full.text.length > (item.text || '').length) {
+                textEl.textContent = full.text;
+                item.text = full.text;
+              }
+              hydrated = true;
+            } catch (error) {
+              showToast(error.message || '抓全文失败');
+            } finally {
+              toggle.disabled = false;
+              toggle.textContent = old;
+            }
+          }
+          const clamped = textEl.classList.toggle('clamped');
+          toggle.textContent = clamped ? '展开全文' : '收起';
+        });
+      });
       els.queryList.querySelectorAll('[data-copy-reply]').forEach((button) => {
         const item = results[Number(button.dataset.copyReply)];
         button.addEventListener('click', () => copyReplyPrompt(item, button));
@@ -1594,7 +1672,8 @@
             </div>
             <span class="badge ${labelClass(item.label)}">${escapeHtml(item.label)}</span>
           </div>
-          <p class="opp-text">${escapeHtml(item.text || '')}</p>
+          <p class="opp-text clamped" data-opp-text>${escapeHtml(item.text || '')}</p>
+          <button class="opp-toggle" type="button" data-opp-toggle hidden>展开全文</button>
           <div class="metrics">
             <span class="metric">热度 ${escapeHtml(item.hotScore ?? 0)}</span>
             <span class="metric">${escapeHtml(item.trafficPool || '流量池未知')}</span>
@@ -1704,12 +1783,20 @@
           throw new Error(data.error || `生成失败：${response.status}`);
         }
         box.innerHTML = `
-          <p>${escapeHtml(data.reply)}</p>
+          <textarea class="reply-edit" data-reply-edit>${escapeHtml(data.reply)}</textarea>
+          <p class="reply-count" data-reply-count></p>
           <div class="opp-actions">
             <button class="mini-btn" type="button" data-copy-generated>复制回复</button>
+            <button class="mini-btn" type="button" data-auto-reply>自动回复</button>
           </div>
         `;
-        box.querySelector('[data-copy-generated]').addEventListener('click', () => copyText(data.reply));
+        const editor = box.querySelector('[data-reply-edit]');
+        const counter = box.querySelector('[data-reply-count]');
+        const updateCount = () => { counter.textContent = `${[...editor.value.trim()].length} 字`; };
+        editor.addEventListener('input', updateCount);
+        updateCount();
+        box.querySelector('[data-copy-generated]').addEventListener('click', () => copyText(editor.value.trim()));
+        box.querySelector('[data-auto-reply]').addEventListener('click', (event) => autoReplyToX(item, editor.value.trim(), event.currentTarget));
       } catch (error) {
         box.classList.add('error');
         box.innerHTML = `
@@ -1722,6 +1809,33 @@
       } finally {
         button.disabled = false;
         button.textContent = '重新生成';
+      }
+    }
+
+    async function autoReplyToX(item, replyText, button) {
+      if (!replyText || !replyText.trim()) {
+        showToast('回复内容是空的');
+        return;
+      }
+      const oldText = button.textContent;
+      button.disabled = true;
+      button.textContent = '发送中';
+      try {
+        const response = await fetch('/api/auto-reply', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ url: item.url, text: replyText })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || `自动回复失败：${response.status}`);
+        }
+        button.textContent = '已发送';
+        showToast('已自动回复');
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = oldText;
+        showToast(error.message || '自动回复失败');
       }
     }
 

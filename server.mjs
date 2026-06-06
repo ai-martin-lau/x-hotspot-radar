@@ -380,6 +380,8 @@ const EXTRACT_SCRIPT = String.raw`
     return String(text || '')
       .replace(/\nShow more\n?/g, '\n')
       .replace(/\n\d+(\.\d+)?[KMB]?\n?$/gi, '')
+      .replace(/(https?:\/\/)\s*\n\s*/gi, '$1')
+      .replace(/\n{3,}/g, '\n\n')
       .trim();
   }
   return [...document.querySelectorAll('article[data-testid="tweet"], article')].map((article) => {
@@ -397,13 +399,23 @@ const EXTRACT_SCRIPT = String.raw`
     const author = (nameBlock.split('\n').find((line) => line && !line.startsWith('@') && !line.includes('·')) || lines[0] || '').trim();
     const timeEl = article.querySelector('time');
     const createdAt = timeEl?.dateTime || '';
-    const text = cleanText(article.innerText);
+    // 只取主推文正文，排除所有 role=link 容器(引用帖 QRT、链接预览卡)里的文字
+    const quotedCards = [...article.querySelectorAll('div[role="link"][tabindex]')];
+    const allTweetTexts = [...article.querySelectorAll('div[data-testid="tweetText"]')];
+    const bodyNodes = allTweetTexts.filter((node) => !quotedCards.some((card) => card.contains(node)));
+    const bodyText = (bodyNodes.length ? bodyNodes : allTweetTexts.slice(0, 1))
+      .map((node) => node.innerText)
+      .join('\n');
+    const text = cleanText(bodyText || article.innerText);
     const views = firstMetric(labels, 'views?') || firstMetric([article.innerText], 'views?');
     const likes = firstMetric(labels, 'likes?');
     const reposts = firstMetric(labels, 'reposts?');
     const replies = firstMetric(labels, 'repl(?:y|ies)');
     const bookmarks = firstMetric(labels, 'bookmarks?');
-    return { id, url: href, author, handle, text, createdAt, views, likes, reposts, replies, bookmarks };
+    // 这条 article 自带「Show more」说明正文被 X 折叠了，标记为截断，前端可按需补全
+    const truncated = [...article.querySelectorAll('button, div[role="button"], a[data-testid$="show-more-link"]')]
+      .some((el) => /^(Show more|显示更多)$/.test((el.innerText || '').trim()));
+    return { id, url: href, author, handle, text, createdAt, views, likes, reposts, replies, bookmarks, truncated };
   }).filter((item) => item && item.id && item.views > 0);
 })()
 `;
@@ -414,6 +426,8 @@ const EXTRACT_POST_SCRIPT = String.raw`
     return String(text || '')
       .replace(/\nShow more\n?/g, '\n')
       .replace(/\n显示更多\n?/g, '\n')
+      .replace(/(https?:\/\/)\s*\n\s*/gi, '$1')
+      .replace(/\n{3,}/g, '\n\n')
       .trim();
   }
   const buttons = [...document.querySelectorAll('button, div[role="button"]')];
@@ -429,10 +443,11 @@ const EXTRACT_POST_SCRIPT = String.raw`
   if (!selected) return '';
   // X 把被引用的旧帖(QRT)作为嵌套卡片放进同一个 <article>，直接取 innerText 会把
   // 主推文 + 引用帖 + 界面文字(Subscribe/浏览数/赞转评)全抓进来，导致"复制提示"带出两条帖子。
-  // 只取主推文的正文节点，排除引用卡片里的正文。
-  const quoted = selected.querySelector('div[role="link"][tabindex]');
-  const mainText = [...selected.querySelectorAll('div[data-testid="tweetText"]')]
-    .filter((node) => !quoted || !quoted.contains(node))
+  // 只取主推文的正文节点，排除所有 role=link 容器(引用帖、链接预览卡)里的正文。
+  const quotedCards = [...selected.querySelectorAll('div[role="link"][tabindex]')];
+  const allTweetTexts = [...selected.querySelectorAll('div[data-testid="tweetText"]')];
+  const bodyNodes = allTweetTexts.filter((node) => !quotedCards.some((card) => card.contains(node)));
+  const mainText = (bodyNodes.length ? bodyNodes : allTweetTexts.slice(0, 1))
     .map((node) => node.innerText)
     .join('\n');
   return cleanText(mainText || selected.innerText);
@@ -488,6 +503,61 @@ async function fetchPostText(url) {
   } finally {
     if (targetId) closeCdpTab(targetId).catch(() => {});
   }
+}
+
+function buildAutoReplyScript(text) {
+  const replyJson = JSON.stringify(String(text || ''));
+  return String.raw`
+(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const replyText = ${replyJson};
+  const findEditor = () =>
+    document.querySelector('[data-testid="tweetTextarea_0"]')
+    || document.querySelector('div[role="textbox"][contenteditable="true"]');
+  let editor = findEditor();
+  if (!editor) {
+    const replyBtn = document.querySelector('[data-testid="reply"]');
+    if (replyBtn) { replyBtn.click(); await wait(1500); }
+    editor = findEditor();
+  }
+  if (!editor) return { ok: false, error: '没找到回复输入框（请确认这个 Chrome 里已登录 X）' };
+  editor.focus();
+  await wait(200);
+  // X 用的是 Draft.js，只能走原生输入管线
+  document.execCommand('selectAll', false, null);
+  document.execCommand('insertText', false, replyText);
+  await wait(800);
+  const typed = ((findEditor() || {}).innerText || '').replace(/​/g, '').trim();
+  if (!typed) return { ok: false, error: '内容没有填进回复框' };
+  const findBtn = () =>
+    document.querySelector('[data-testid="tweetButtonInline"]')
+    || document.querySelector('[data-testid="tweetButton"]');
+  let btn = findBtn();
+  for (let i = 0; i < 8 && (!btn || btn.getAttribute('aria-disabled') === 'true'); i++) {
+    await wait(400);
+    btn = findBtn();
+  }
+  if (!btn || btn.getAttribute('aria-disabled') === 'true') {
+    return { ok: false, error: '回复按钮不可点击（可能未登录或内容被拦截）', typed };
+  }
+  btn.click();
+  await wait(2800);
+  return { ok: true, typed };
+})()
+`;
+}
+
+async function autoReply(url, text) {
+  const statusId = (String(url || '').match(/\/status\/(\d+)/) || [])[1] || '';
+  if (!statusId) throw new Error('无法识别原帖链接');
+  const targetId = await openCdpTab(url);
+  await wait(3200);
+  const result = await cdpEval(targetId, buildAutoReplyScript(text), 60000);
+  // 故意不关闭标签页，留着让你肉眼确认回复确实发出去了
+  if (!result || !result.ok) {
+    throw new Error((result && result.error) || '自动回复失败');
+  }
+  return result;
 }
 
 async function handleScan(req, res) {
@@ -686,6 +756,27 @@ async function handleReply(req, res) {
   }
 }
 
+async function handleAutoReply(req, res) {
+  const body = await readBody(req);
+  const payload = body ? JSON.parse(body) : {};
+  const url = String(payload.url || '').trim();
+  const text = String(payload.text || '').trim();
+  if (!url) { sendJson(res, { ok: false, error: '缺少原帖链接' }, 400); return; }
+  if (!text) { sendJson(res, { ok: false, error: '缺少回复内容' }, 400); return; }
+
+  try {
+    const health = await getCdpHealth().catch(() => null);
+    if (!health?.connected) {
+      sendJson(res, { ok: false, error: getCdpSetupHint() }, 500);
+      return;
+    }
+    const result = await autoReply(url, text);
+    sendJson(res, { ok: true, typed: result.typed });
+  } catch (error) {
+    sendJson(res, { ok: false, error: error.message || String(error) }, 500);
+  }
+}
+
 async function serveStatic(req, res) {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
   const pathname = url.pathname === '/' ? '/index.html' : url.pathname;
@@ -731,6 +822,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.url === '/api/reply' && req.method === 'POST') {
       await handleReply(req, res);
+      return;
+    }
+    if (req.url === '/api/auto-reply' && req.method === 'POST') {
+      await handleAutoReply(req, res);
       return;
     }
     await serveStatic(req, res);
