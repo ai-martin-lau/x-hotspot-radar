@@ -408,6 +408,29 @@ const EXTRACT_SCRIPT = String.raw`
 })()
 `;
 
+const EXTRACT_POST_SCRIPT = String.raw`
+(targetId => {
+  function cleanText(text) {
+    return String(text || '')
+      .replace(/\nShow more\n?/g, '\n')
+      .replace(/\n显示更多\n?/g, '\n')
+      .trim();
+  }
+  const buttons = [...document.querySelectorAll('button, div[role="button"]')];
+  buttons
+    .filter((button) => /Show more|显示更多|展开/.test(button.innerText || button.getAttribute('aria-label') || ''))
+    .slice(0, 6)
+    .forEach((button) => button.click());
+  const articles = [...document.querySelectorAll('article[data-testid="tweet"], article')];
+  const selected = articles.find((article) => {
+    return [...article.querySelectorAll('a[href*="/status/"]')]
+      .some((link) => (link.getAttribute('href') || '').includes('/status/' + targetId));
+  }) || articles[0];
+  if (!selected) return '';
+  return cleanText(selected.innerText);
+})('__TARGET_ID__')
+`;
+
 async function scanQuery(queryConfig) {
   const { keyword, query, url, scrolls } = queryConfig;
   let targetId = '';
@@ -438,6 +461,24 @@ async function scanQuery(queryConfig) {
     if (targetId) {
       closeCdpTab(targetId).catch(() => {});
     }
+  }
+}
+
+async function fetchPostText(url) {
+  let targetId = '';
+  const statusId = (String(url || '').match(/\/status\/(\d+)/) || [])[1] || '';
+  if (!statusId) throw new Error('无法识别原帖链接');
+  try {
+    targetId = await openCdpTab(url);
+    await wait(2600);
+    const expression = EXTRACT_POST_SCRIPT.replace('__TARGET_ID__', statusId);
+    let text = await cdpEval(targetId, expression, 45000);
+    await wait(800);
+    text = await cdpEval(targetId, expression, 45000);
+    if (!String(text || '').trim()) throw new Error('没有读取到原帖内容');
+    return String(text).trim();
+  } finally {
+    if (targetId) closeCdpTab(targetId).catch(() => {});
   }
 }
 
@@ -517,6 +558,26 @@ async function handleScan(req, res) {
     scanned,
     results: results.slice(0, 80),
   });
+}
+
+async function handlePost(req, res) {
+  const body = await readBody(req);
+  const payload = body ? JSON.parse(body) : {};
+  if (!String(payload.url || '').trim()) {
+    sendJson(res, { ok: false, error: '缺少原帖链接' }, 400);
+    return;
+  }
+  try {
+    const health = await getCdpHealth().catch(() => null);
+    if (!health?.connected) {
+      sendJson(res, { ok: false, error: getCdpSetupHint() }, 500);
+      return;
+    }
+    const text = await fetchPostText(payload.url);
+    sendJson(res, { ok: true, text });
+  } catch (error) {
+    sendJson(res, { ok: false, error: error.message || String(error) }, 500);
+  }
 }
 
 function trimText(value, maxLength = 4000) {
@@ -650,6 +711,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.url === '/api/scan' && req.method === 'POST') {
       await handleScan(req, res);
+      return;
+    }
+    if (req.url === '/api/post' && req.method === 'POST') {
+      await handlePost(req, res);
       return;
     }
     if (req.url === '/api/reply' && req.method === 'POST') {

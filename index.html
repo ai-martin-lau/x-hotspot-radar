@@ -1032,6 +1032,7 @@
     let blacklistTimer = 0;
     let editingBlacklist = false;
     const editingPresets = new Set();
+    const postTextCache = new Map();
 
     function getLocalDate(daysAgo = 0) {
       const d = new Date();
@@ -1573,7 +1574,7 @@
       });
       els.queryList.querySelectorAll('[data-copy-reply]').forEach((button) => {
         const item = results[Number(button.dataset.copyReply)];
-        button.addEventListener('click', () => copyText(buildReplyPrompt(item)));
+        button.addEventListener('click', () => copyReplyPrompt(item, button));
       });
       els.queryList.querySelectorAll('[data-generate-reply]').forEach((button) => {
         const item = results[Number(button.dataset.generateReply)];
@@ -1637,6 +1638,42 @@
       ].join('\n');
     }
 
+    async function hydratePostText(item) {
+      if (!item?.url) return item;
+      if (postTextCache.has(item.url)) {
+        return { ...item, text: postTextCache.get(item.url) || item.text };
+      }
+      try {
+        const response = await fetch('/api/post', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ url: item.url })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok || !String(data.text || '').trim()) {
+          throw new Error(data.error || '原帖补全文失败');
+        }
+        postTextCache.set(item.url, data.text);
+        return { ...item, text: data.text };
+      } catch (_) {
+        postTextCache.set(item.url, item.text || '');
+        return item;
+      }
+    }
+
+    async function copyReplyPrompt(item, button) {
+      const oldText = button.textContent;
+      button.disabled = true;
+      button.textContent = '补全文';
+      try {
+        const fullItem = await hydratePostText(item);
+        copyText(buildReplyPrompt(fullItem));
+      } finally {
+        button.disabled = false;
+        button.textContent = oldText;
+      }
+    }
+
     async function generateReply(item, button) {
       const box = document.getElementById(`replyBox-${button.dataset.generateReply}`);
       if (!box) return;
@@ -1648,16 +1685,17 @@
       box.innerHTML = '<p>正在调用 Claude Code...</p>';
 
       try {
+        const fullItem = await hydratePostText(item);
         const response = await fetch('/api/reply', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            author: item.author,
-            handle: item.handle,
-            url: item.url,
-            keyword: item.keyword,
-            keywords: item.keywords?.join(' / ') || item.keyword || '',
-            text: item.text
+            author: fullItem.author,
+            handle: fullItem.handle,
+            url: fullItem.url,
+            keyword: fullItem.keyword,
+            keywords: fullItem.keywords?.join(' / ') || fullItem.keyword || '',
+            text: fullItem.text
           })
         });
         const data = await response.json();
@@ -1679,7 +1717,7 @@
             <button class="mini-btn ghost" type="button" data-copy-fallback>复制提示</button>
           </div>
         `;
-        box.querySelector('[data-copy-fallback]').addEventListener('click', () => copyText(buildReplyPrompt(item)));
+        box.querySelector('[data-copy-fallback]').addEventListener('click', () => copyReplyPrompt(item, box.querySelector('[data-copy-fallback]')));
       } finally {
         button.disabled = false;
         button.textContent = '重新生成';
