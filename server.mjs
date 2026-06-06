@@ -427,7 +427,15 @@ const EXTRACT_POST_SCRIPT = String.raw`
       .some((link) => (link.getAttribute('href') || '').includes('/status/' + targetId));
   }) || articles[0];
   if (!selected) return '';
-  return cleanText(selected.innerText);
+  // X 把被引用的旧帖(QRT)作为嵌套卡片放进同一个 <article>，直接取 innerText 会把
+  // 主推文 + 引用帖 + 界面文字(Subscribe/浏览数/赞转评)全抓进来，导致"复制提示"带出两条帖子。
+  // 只取主推文的正文节点，排除引用卡片里的正文。
+  const quoted = selected.querySelector('div[role="link"][tabindex]');
+  const mainText = [...selected.querySelectorAll('div[data-testid="tweetText"]')]
+    .filter((node) => !quoted || !quoted.contains(node))
+    .map((node) => node.innerText)
+    .join('\n');
+  return cleanText(mainText || selected.innerText);
 })('__TARGET_ID__')
 `;
 
