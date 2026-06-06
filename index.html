@@ -1655,9 +1655,8 @@
         }
         postTextCache.set(item.url, data.text);
         return { ...item, text: data.text };
-      } catch (_) {
-        postTextCache.set(item.url, item.text || '');
-        return item;
+      } catch (error) {
+        throw new Error(error.message || '原帖补全文失败');
       }
     }
 
@@ -1668,6 +1667,8 @@
       try {
         const fullItem = await hydratePostText(item);
         copyText(buildReplyPrompt(fullItem));
+      } catch (error) {
+        showToast(error.message || '原帖补全文失败');
       } finally {
         button.disabled = false;
         button.textContent = oldText;
