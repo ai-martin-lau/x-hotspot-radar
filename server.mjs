@@ -134,11 +134,12 @@ async function getCdpHealth() {
 
 async function bringCdpTabToFront(targetId) {
   // X 等站点会节流「后台隐藏标签」，不渲染推文正文/搜索结果。
-  // 必须把标签置前台（Page.bringToFront），内容才会真正渲染出来。
+  // 用 /focus（Emulation.setFocusEmulationEnabled）让标签当作前台渲染，但不真正 bringToFront，
+  // 所以不会把浏览器切到 X 页面、不抢焦点。proxy 在建标签时已设过一次，这里是轮询期间的重申。
   if (CDP_PROXY_URL) {
-    return proxyJson(`/front?target=${encodeURIComponent(targetId)}`, { timeoutMs: 10000 }).catch(() => {});
+    return proxyJson(`/focus?target=${encodeURIComponent(targetId)}`, { timeoutMs: 10000 }).catch(() => {});
   }
-  return chromeCommand(targetId, 'Page.bringToFront', {}, 10000).catch(() => {});
+  return chromeCommand(targetId, 'Emulation.setFocusEmulationEnabled', { enabled: true }, 10000).catch(() => {});
 }
 
 async function openCdpTab(url) {
@@ -195,6 +196,111 @@ async function cdpEval(targetId, expression, timeoutMs = 30000) {
 function getCdpSetupHint() {
   if (CDP_PROXY_URL) return 'CDP proxy 未连接';
   return `Chrome DevTools 未连接，请用 remote debugging 启动 Chrome：${CHROME_DEBUG_URL}`;
+}
+
+// 注入到每个抓取标签页（在任何页面脚本之前执行）：
+// 1) navigator.webdriver 伪装成正常浏览器的 false，避免被识别为自动化；
+// 2) 强制 Page Visibility 一直是 visible，配合下面的 Emulation.setFocusEmulationEnabled，
+//    让 X 以为标签在前台、正常渲染搜索结果——但并不真的把窗口拉到前台，所以不抢焦点。
+const STEALTH_SCRIPT = `
+(() => {
+  try { Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true }); } catch (e) {}
+  try {
+    Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+    Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
+    document.addEventListener('visibilitychange', (e) => e.stopImmediatePropagation(), true);
+  } catch (e) {}
+})();
+`;
+
+async function getBrowserWsUrl() {
+  const version = await chromeJson('/json/version', { timeoutMs: 5000 });
+  if (!version?.webSocketDebuggerUrl) throw new Error('拿不到 Chrome 浏览器级 CDP 地址');
+  return version.webSocketDebuggerUrl;
+}
+
+// 一条持久的 CDP 连接：Emulation.setFocusEmulationEnabled 等「会话级」覆盖在 ws 断开后会被重置，
+// 所以抓取期间必须复用同一条连接，而不是像旧逻辑那样每条命令都新开/关一条 ws。
+function openChromeSession(wsUrl) {
+  const ws = new WebSocket(wsUrl);
+  let nextId = 1;
+  const pending = new Map();
+  ws.addEventListener('message', (event) => {
+    let msg;
+    try { msg = JSON.parse(String(event.data)); } catch { return; }
+    if (msg.id && pending.has(msg.id)) {
+      const entry = pending.get(msg.id);
+      clearTimeout(entry.timer);
+      pending.delete(msg.id);
+      if (msg.error) entry.reject(new Error(msg.error.message || JSON.stringify(msg.error)));
+      else entry.resolve(msg.result);
+    }
+  });
+  const ready = new Promise((resolve, reject) => {
+    ws.addEventListener('open', () => resolve());
+    ws.addEventListener('error', () => reject(new Error('Chrome CDP WebSocket 连接失败')));
+  });
+  const send = (method, params = {}, timeoutMs = 30000) => new Promise((resolve, reject) => {
+    if (ws.readyState !== WebSocket.OPEN) { reject(new Error('CDP 连接已关闭')); return; }
+    const id = nextId++;
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`Chrome CDP 超时：${method}`)); }, timeoutMs);
+    pending.set(id, { resolve, reject, timer });
+    ws.send(JSON.stringify({ id, method, params }));
+  });
+  const close = () => { try { ws.close(); } catch { /* noop */ } };
+  return { ready, send, close };
+}
+
+async function evalInSession(session, expression, timeoutMs = 30000) {
+  const result = await session.send('Runtime.evaluate', {
+    expression,
+    awaitPromise: true,
+    returnByValue: true,
+  }, timeoutMs);
+  if (result?.exceptionDetails) {
+    throw new Error(result.exceptionDetails.text || '页面脚本执行失败');
+  }
+  return result?.result?.value;
+}
+
+async function getChromeTargetWithRetry(targetId, tries = 6) {
+  for (let i = 0; i < tries; i += 1) {
+    try { return await getChromeTarget(targetId); }
+    catch (error) { if (i === tries - 1) throw error; await wait(300); }
+  }
+  throw new Error(`找不到 Chrome target：${targetId}`);
+}
+
+async function createBlankTarget() {
+  // 优先用浏览器级 CDP 在「后台」新建标签（background:true，不抢前台焦点）。
+  try {
+    const browser = openChromeSession(await getBrowserWsUrl());
+    try {
+      await browser.ready;
+      const created = await browser.send('Target.createTarget', { url: 'about:blank', background: true }, 15000);
+      if (created?.targetId) return created.targetId;
+    } finally {
+      browser.close();
+    }
+  } catch { /* 回退到 /json/new */ }
+  const tab = await chromeJson('/json/new?about:blank', { method: 'PUT', timeoutMs: 45000 });
+  if (!tab?.id) throw new Error('Chrome 没有返回新标签页 id');
+  return tab.id;
+}
+
+// 打开一个「隐身」抓取标签：后台创建 → 注入 stealth 脚本 → 模拟聚焦关闭后台节流 → 导航。
+// 全程不调用 Page.bringToFront，所以不会把你的 Chrome 切到 X 页面、不抢焦点。
+async function openStealthTab(url) {
+  const targetId = await createBlankTarget();
+  const target = await getChromeTargetWithRetry(targetId);
+  const session = openChromeSession(target.webSocketDebuggerUrl);
+  await session.ready;
+  await session.send('Page.enable').catch(() => {});
+  await session.send('Page.addScriptToEvaluateOnNewDocument', { source: STEALTH_SCRIPT }).catch(() => {});
+  // 关键：让 Blink 以为页面「聚焦且活跃」，从而关闭后台标签的渲染/定时器节流，但不真正前置窗口。
+  await session.send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {});
+  await session.send('Page.navigate', { url }, 45000);
+  return { session, targetId };
 }
 
 async function wait(ms) {
@@ -480,6 +586,49 @@ const EXTRACT_POST_SCRIPT = String.raw`
 `;
 
 async function scanQuery(queryConfig) {
+  // 走 CDP proxy 时维持原逻辑；直连 Chrome 时用「隐身后台标签」，不抢焦点。
+  if (CDP_PROXY_URL) return scanQueryViaProxy(queryConfig);
+  const { keyword, query, url, scrolls } = queryConfig;
+  let session = null;
+  let targetId = '';
+  try {
+    ({ session, targetId } = await openStealthTab(url));
+    // X 搜索结果是懒加载：轮询等到结果出现再继续（最多 ~16 秒），
+    // 期间反复重申「聚焦模拟」，确保 X 真正渲染（否则只拿到导航栏、0 结果）。
+    await wait(2200);
+    for (let i = 0; i < 9; i += 1) {
+      const n = await evalInSession(session, "document.querySelectorAll('article').length", 10000).catch(() => 0);
+      if (Number(n) > 0) break;
+      await session.send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {});
+      await wait(1500);
+    }
+    for (let i = 0; i < scrolls; i += 1) {
+      await evalInSession(session, 'window.scrollBy(0, 2600); true', 15000).catch(() => {});
+      await wait(900);
+    }
+    const posts = await evalInSession(session, EXTRACT_SCRIPT, 45000);
+    return {
+      keyword,
+      query,
+      url,
+      posts: Array.isArray(posts) ? posts.map((post) => enrichPost(post, keyword)) : [],
+      error: null,
+    };
+  } catch (error) {
+    return {
+      keyword,
+      query,
+      url,
+      posts: [],
+      error: error.message || String(error),
+    };
+  } finally {
+    if (session) session.close();
+    if (targetId) closeCdpTab(targetId).catch(() => {});
+  }
+}
+
+async function scanQueryViaProxy(queryConfig) {
   const { keyword, query, url, scrolls } = queryConfig;
   let targetId = '';
   try {
@@ -521,9 +670,28 @@ async function scanQuery(queryConfig) {
 }
 
 async function fetchPostText(url) {
-  let targetId = '';
   const statusId = (String(url || '').match(/\/status\/(\d+)/) || [])[1] || '';
   if (!statusId) throw new Error('无法识别原帖链接');
+  if (CDP_PROXY_URL) return fetchPostTextViaProxy(url, statusId);
+  let session = null;
+  let targetId = '';
+  try {
+    ({ session, targetId } = await openStealthTab(url));
+    await wait(3500);
+    const expression = EXTRACT_POST_SCRIPT.replace('__TARGET_ID__', statusId);
+    let text = await evalInSession(session, expression, 45000);
+    await wait(800);
+    text = await evalInSession(session, expression, 45000);
+    if (!String(text || '').trim()) throw new Error('没有读取到原帖内容');
+    return String(text).trim();
+  } finally {
+    if (session) session.close();
+    if (targetId) closeCdpTab(targetId).catch(() => {});
+  }
+}
+
+async function fetchPostTextViaProxy(url, statusId) {
+  let targetId = '';
   try {
     targetId = await openCdpTab(url);
     await wait(3500);
@@ -583,9 +751,21 @@ function buildAutoReplyScript(text) {
 async function autoReply(url, text) {
   const statusId = (String(url || '').match(/\/status\/(\d+)/) || [])[1] || '';
   if (!statusId) throw new Error('无法识别原帖链接');
-  const targetId = await openCdpTab(url);
+  if (CDP_PROXY_URL) {
+    const targetId = await openCdpTab(url);
+    await wait(3200);
+    const result = await cdpEval(targetId, buildAutoReplyScript(text), 60000);
+    // 故意不关闭标签页，留着让你肉眼确认回复确实发出去了
+    if (!result || !result.ok) throw new Error((result && result.error) || '自动回复失败');
+    return result;
+  }
+  // 直连：用隐身标签（webdriver 已伪装），靠聚焦模拟让 Draft.js 输入框可写。
+  const { session } = await openStealthTab(url);
   await wait(3200);
-  const result = await cdpEval(targetId, buildAutoReplyScript(text), 60000);
+  const result = await evalInSession(session, buildAutoReplyScript(text), 60000);
+  // 发帖是你主动触发的动作，回复发出后把标签真正前置，方便肉眼确认（这一步会切到 X，属预期）。
+  await session.send('Page.bringToFront', {}, 10000).catch(() => {});
+  session.close();
   // 故意不关闭标签页，留着让你肉眼确认回复确实发出去了
   if (!result || !result.ok) {
     throw new Error((result && result.error) || '自动回复失败');
