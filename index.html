@@ -1485,8 +1485,13 @@
       });
 
       els.resetBtn.addEventListener('click', () => {
+        const keepBlacklist = state.blacklist;
+        const keepPresets = state.presets;
         localStorage.removeItem(STORAGE_KEY);
         state = loadState();
+        state.blacklist = keepBlacklist;
+        state.presets = keepPresets;
+        saveState();
         activeFilter = state.filter;
         nextIndex = 0;
         editingPresets.clear();
