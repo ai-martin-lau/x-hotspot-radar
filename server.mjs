@@ -10,6 +10,9 @@ const PORT = Number(process.env.PORT || 8787);
 const CDP_PROXY_URL = process.env.CDP_PROXY_URL || '';
 const CHROME_DEBUG_URL = process.env.CHROME_DEBUG_URL || `http://127.0.0.1:${process.env.CHROME_DEBUG_PORT || 9222}`;
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
+// 生成一条短回复用快模型即可（Opus 慢且高峰限流，44s 会让手机请求超时报 Load failed）。
+// Sonnet 几秒出，质量足够；可用环境变量 CLAUDE_MODEL 覆盖（sonnet / haiku / opus）。
+const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'sonnet';
 // Opus 高峰会被限流，一条短回复可能要几分钟，给足 5 分钟避免误判超时
 const CLAUDE_TIMEOUT_MS = Number(process.env.CLAUDE_TIMEOUT_MS) || 300000;
 
@@ -129,14 +132,28 @@ async function getCdpHealth() {
   };
 }
 
+async function bringCdpTabToFront(targetId) {
+  // X 等站点会节流「后台隐藏标签」，不渲染推文正文/搜索结果。
+  // 必须把标签置前台（Page.bringToFront），内容才会真正渲染出来。
+  if (CDP_PROXY_URL) {
+    return proxyJson(`/front?target=${encodeURIComponent(targetId)}`, { timeoutMs: 10000 }).catch(() => {});
+  }
+  return chromeCommand(targetId, 'Page.bringToFront', {}, 10000).catch(() => {});
+}
+
 async function openCdpTab(url) {
+  let targetId;
   if (CDP_PROXY_URL) {
     const tab = await proxyJson('/new', { method: 'POST', body: url, timeoutMs: 45000 });
-    return tab.targetId;
+    targetId = tab.targetId;
+  } else {
+    const tab = await chromeJson(`/json/new?${encodeURIComponent(url)}`, { method: 'PUT', timeoutMs: 45000 });
+    if (!tab?.id) throw new Error('Chrome 没有返回新标签页 id');
+    targetId = tab.id;
   }
-  const tab = await chromeJson(`/json/new?${encodeURIComponent(url)}`, { method: 'PUT', timeoutMs: 45000 });
-  if (!tab?.id) throw new Error('Chrome 没有返回新标签页 id');
-  return tab.id;
+  if (!targetId) throw new Error('Chrome 没有返回新标签页 id');
+  await bringCdpTabToFront(targetId);
+  return targetId;
 }
 
 async function closeCdpTab(targetId) {
@@ -194,7 +211,8 @@ function quoteIfNeeded(keyword) {
 function buildQuery({ keyword, lang, minFav, since, exclude, filter }) {
   const parts = [quoteIfNeeded(keyword)];
   if (filter === 'people') return parts.filter(Boolean).join(' ');
-  if (lang) parts.push(`lang:${lang}`);
+  // lang:any / lang:all 不是有效的 X 搜索操作符，会导致 0 结果；选"全部语言"时直接不加 lang 过滤
+  if (lang && lang !== 'any' && lang !== 'all') parts.push(`lang:${lang}`);
   if (Number(minFav) > 0) parts.push(`min_faves:${Number(minFav)}`);
   if (since) parts.push(`since:${since}`);
   if (exclude) parts.push(exclude);
@@ -466,7 +484,15 @@ async function scanQuery(queryConfig) {
   let targetId = '';
   try {
     targetId = await openCdpTab(url);
+    // X 搜索结果是懒加载，后台标签更慢：轮询等到结果出现再继续（最多 ~16 秒），
+    // 等待期间反复置前台，确保 X 真正渲染（否则只拿到导航栏、0 结果）。
     await wait(2200);
+    for (let i = 0; i < 9; i += 1) {
+      const n = await cdpEval(targetId, 'document.querySelectorAll(\'article\').length', 10000).catch(() => 0);
+      if (Number(n) > 0) break;
+      await bringCdpTabToFront(targetId);
+      await wait(1500);
+    }
     for (let i = 0; i < scrolls; i += 1) {
       await scrollCdpTab(targetId, 2600);
       await wait(900);
@@ -500,7 +526,7 @@ async function fetchPostText(url) {
   if (!statusId) throw new Error('无法识别原帖链接');
   try {
     targetId = await openCdpTab(url);
-    await wait(2600);
+    await wait(3500);
     const expression = EXTRACT_POST_SCRIPT.replace('__TARGET_ID__', statusId);
     let text = await cdpEval(targetId, expression, 45000);
     await wait(800);
@@ -700,6 +726,8 @@ function runClaude(prompt) {
   return new Promise((resolve, reject) => {
     const child = spawn(CLAUDE_BIN, [
       '-p',
+      '--model',
+      CLAUDE_MODEL,
       '--output-format',
       'text',
       '--no-session-persistence',
@@ -807,6 +835,9 @@ async function serveStatic(req, res) {
     const type = ext === '.html' ? 'text/html; charset=utf-8'
       : ext === '.js' ? 'text/javascript; charset=utf-8'
       : ext === '.css' ? 'text/css; charset=utf-8'
+      : ext === '.png' ? 'image/png'
+      : ext === '.svg' ? 'image/svg+xml'
+      : ext === '.json' ? 'application/json; charset=utf-8'
       : 'application/octet-stream';
     res.writeHead(200, { 'content-type': type });
     res.end(data);
