@@ -912,7 +912,14 @@ function runClaude(prompt) {
       'text',
       '--no-session-persistence',
       '--permission-mode',
-      'dontAsk'
+      'dontAsk',
+      // 冷启动提速：生成一条短回复不需要任何 MCP / 全局 skill / 插件。
+      // --strict-mcp-config：不启动用户配置里那一堆 MCP 服务器（否则每次都 spawn 做健康检查，叠几十秒）。
+      // --setting-sources project：不加载全局 settings/skill/插件和全局 CLAUDE.md，只看项目级。
+      // 注意：anthropic API 直连会 403（地区墙），必须保留 http_proxy 走代理认证——所以这里不动 env 的代理。
+      '--strict-mcp-config',
+      '--setting-sources',
+      'project'
     ], {
       cwd: ROOT,
       env: {
