@@ -1057,7 +1057,7 @@
     // 自动回复串行队列：一次只发一条，条间随机间隔，单日封顶——节奏压成真人手速，避免突发并发像 bot。
     const REPLY_MIN_GAP_MS = 40000;   // 条与条之间最短间隔
     const REPLY_MAX_GAP_MS = 120000;  // 条与条之间最长间隔
-    const REPLY_DAILY_CAP = 20;       // 单日自动回复上限
+    const REPLY_DAILY_CAP = 30;       // 单日自动回复上限
     const REPLY_QUOTA_KEY = 'xRadarReplyQuota.v1';
     const defaultPresets = [
       {
