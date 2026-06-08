@@ -1059,6 +1059,7 @@
     const REPLY_MAX_GAP_MS = 120000;  // 条与条之间最长间隔
     const REPLY_DAILY_CAP = 30;       // 单日自动回复上限
     const REPLY_QUOTA_KEY = 'xRadarReplyQuota.v1';
+    const REPLY_QUEUE_KEY = 'xRadarReplyQueue.v1';
     const defaultPresets = [
       {
         id: 'zh-ai',
@@ -1903,6 +1904,29 @@
       setTimeout(() => els.queueStatus.classList.remove('show'), delay);
     }
 
+    // 把队列里「还没成功发出」的任务持久化（只存重发必需的 url+text，DOM 不可序列化）。
+    // 刷新后 editor/button 都没了，但凭 url+text 仍能续发。
+    function persistReplyQueue() {
+      try {
+        const data = replyQueue.map((j) => ({
+          url: j.url,
+          // 优先用输入框实时内容（本会话），续发的任务无 editor 就用快照
+          text: (j.editor ? (j.editor.value || '').trim() : '') || j.text
+        }));
+        if (data.length) localStorage.setItem(REPLY_QUEUE_KEY, JSON.stringify(data));
+        else localStorage.removeItem(REPLY_QUEUE_KEY);
+      } catch (_) {}
+    }
+
+    // 标记按钮状态（续发的任务没有按钮，安全跳过）
+    function markJobButton(job, { text, queued, disabled } = {}) {
+      const btn = job.button;
+      if (!btn) return;
+      if (typeof queued === 'string') btn.dataset.queued = queued;
+      if (typeof disabled === 'boolean') btn.disabled = disabled;
+      if (typeof text === 'string') btn.textContent = text;
+    }
+
     function enqueueAutoReply(item, editor, button) {
       const replyText = (editor.value || '').trim();
       if (!replyText) { showToast('回复内容是空的'); return; }
@@ -1914,7 +1938,8 @@
       button.dataset.queued = '1';
       button.disabled = true;
       button.textContent = '排队中';
-      replyQueue.push({ item, editor, button });
+      replyQueue.push({ url: item.url, text: replyText, item, editor, button });
+      persistReplyQueue();
       runReplyQueue();
     }
 
@@ -1941,34 +1966,36 @@
             setQueueStatus(`今日已达上限 ${REPLY_DAILY_CAP} 条，剩 ${replyQueue.length} 条已取消`);
             while (replyQueue.length) {
               const job = replyQueue.shift();
-              job.button.dataset.queued = '';
-              job.button.disabled = false;
-              job.button.textContent = '今日已满';
+              markJobButton(job, { queued: '', disabled: false, text: '今日已满' });
             }
+            persistReplyQueue();
             hideQueueStatus(4000);
             break;
           }
 
-          const job = replyQueue.shift();
-          const replyText = (job.editor.value || '').trim();
+          // 先 peek 不出队：发送途中若刷新，这条仍在持久化里，刷新后能续发
+          const job = replyQueue[0];
+          const replyText = (job.editor ? (job.editor.value || '').trim() : '') || job.text;
           if (!replyText) {
-            job.button.dataset.queued = '';
-            job.button.disabled = false;
-            job.button.textContent = '内容为空';
+            replyQueue.shift();
+            persistReplyQueue();
+            markJobButton(job, { queued: '', disabled: false, text: '内容为空' });
             continue;
           }
 
-          job.button.textContent = '发送中';
-          setQueueStatus(`正在发送…（队列还剩 ${replyQueue.length} 条）`);
+          markJobButton(job, { text: '发送中' });
+          setQueueStatus(`正在发送…（队列还剩 ${replyQueue.length - 1} 条）`);
           try {
-            await sendAutoReply(job.item.url, replyText);
+            await sendAutoReply(job.url, replyText);
             const used = bumpReplyQuota();
-            job.button.textContent = '已发送';
+            replyQueue.shift();
+            persistReplyQueue();
+            markJobButton(job, { text: '已发送' });
             showToast(`已自动回复（今日 ${used}/${REPLY_DAILY_CAP}）`);
           } catch (error) {
-            job.button.dataset.queued = '';
-            job.button.disabled = false;
-            job.button.textContent = '重试自动回复';
+            replyQueue.shift();
+            persistReplyQueue();
+            markJobButton(job, { queued: '', disabled: false, text: '重试自动回复' });
             showToast(error.message || '自动回复失败');
           }
 
@@ -1990,6 +2017,21 @@
           hideQueueStatus();
         }
       }
+    }
+
+    // 页面载入时恢复上次未发完的队列（这些任务没有对应的卡片按钮，靠状态条 + toast 反馈）
+    function restoreReplyQueue() {
+      let saved;
+      try { saved = JSON.parse(localStorage.getItem(REPLY_QUEUE_KEY) || '[]'); } catch (_) { saved = []; }
+      if (!Array.isArray(saved) || !saved.length) return;
+      const jobs = saved
+        .filter((j) => j && j.url && (j.text || '').trim())
+        .map((j) => ({ url: j.url, text: String(j.text).trim(), item: null, editor: null, button: null }));
+      if (!jobs.length) { localStorage.removeItem(REPLY_QUEUE_KEY); return; }
+      replyQueue.push(...jobs);
+      showToast(`恢复上次未发完的队列：${jobs.length} 条`);
+      setQueueStatus(`恢复队列：待发 ${jobs.length} 条`);
+      runReplyQueue();
     }
 
     async function copyText(text) {
@@ -2028,6 +2070,7 @@
     bindSettings();
     renderPresets();
     renderGuide();
+    restoreReplyQueue();
   </script>
 </body>
 </html>
