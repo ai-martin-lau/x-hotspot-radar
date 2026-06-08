@@ -836,6 +836,46 @@
       transform: translateX(-50%) translateY(0);
     }
 
+    .queue-status {
+      position: fixed;
+      left: 24px;
+      bottom: 24px;
+      max-width: 320px;
+      padding: 10px 16px;
+      border-radius: 14px;
+      background: rgba(29, 29, 31, 0.92);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.45;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+      opacity: 0;
+      transform: translateY(12px);
+      pointer-events: none;
+      transition: opacity 0.16s, transform 0.16s;
+      z-index: 50;
+    }
+
+    .queue-status.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .queue-status .queue-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-right: 7px;
+      border-radius: 50%;
+      background: #34c759;
+      animation: queuePulse 1.1s ease-in-out infinite;
+    }
+
+    @keyframes queuePulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
     @media (max-width: 860px) {
       .app {
         width: min(100vw - 24px, 680px);
@@ -1009,10 +1049,16 @@
   </main>
 
   <div class="toast" id="toast">已复制</div>
+  <div class="queue-status" id="queueStatus"></div>
 
   <script>
     const STORAGE_KEY = 'xRadarSettings.v1';
     const DEFAULT_BLACKLIST = '';
+    // 自动回复串行队列：一次只发一条，条间随机间隔，单日封顶——节奏压成真人手速，避免突发并发像 bot。
+    const REPLY_MIN_GAP_MS = 40000;   // 条与条之间最短间隔
+    const REPLY_MAX_GAP_MS = 120000;  // 条与条之间最长间隔
+    const REPLY_DAILY_CAP = 20;       // 单日自动回复上限
+    const REPLY_QUOTA_KEY = 'xRadarReplyQuota.v1';
     const defaultPresets = [
       {
         id: 'zh-ai',
@@ -1070,7 +1116,8 @@
       openNextBtn: document.getElementById('openNextBtn'),
       resetBtn: document.getElementById('resetBtn'),
       surfBtn: document.getElementById('surfBtn'),
-      toast: document.getElementById('toast')
+      toast: document.getElementById('toast'),
+      queueStatus: document.getElementById('queueStatus')
     };
 
     let state = loadState();
@@ -1808,7 +1855,7 @@
         editor.addEventListener('input', updateCount);
         updateCount();
         box.querySelector('[data-copy-generated]').addEventListener('click', () => copyText(editor.value.trim()));
-        box.querySelector('[data-auto-reply]').addEventListener('click', (event) => autoReplyToX(item, editor.value.trim(), event.currentTarget));
+        box.querySelector('[data-auto-reply]').addEventListener('click', (event) => enqueueAutoReply(item, editor, event.currentTarget));
       } catch (error) {
         box.classList.add('error');
         box.innerHTML = `
@@ -1824,30 +1871,124 @@
       }
     }
 
-    async function autoReplyToX(item, replyText, button) {
-      if (!replyText || !replyText.trim()) {
-        showToast('回复内容是空的');
+    // ===== 自动回复串行队列 =====
+    const replyQueue = [];
+    let replyQueueRunning = false;
+
+    const waitMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const todayKey = () => new Date().toISOString().slice(0, 10);
+
+    // 单日配额：跨天自动归零
+    function getReplyQuota() {
+      let q;
+      try { q = JSON.parse(localStorage.getItem(REPLY_QUOTA_KEY) || '{}'); } catch (_) { q = {}; }
+      if (q.date !== todayKey()) q = { date: todayKey(), count: 0 };
+      return q;
+    }
+    function bumpReplyQuota() {
+      const q = getReplyQuota();
+      q.count += 1;
+      localStorage.setItem(REPLY_QUOTA_KEY, JSON.stringify(q));
+      return q.count;
+    }
+    function replyQuotaLeft() {
+      return Math.max(0, REPLY_DAILY_CAP - getReplyQuota().count);
+    }
+
+    function setQueueStatus(html) {
+      els.queueStatus.innerHTML = `<span class="queue-dot"></span>${html}`;
+      els.queueStatus.classList.add('show');
+    }
+    function hideQueueStatus(delay = 2600) {
+      setTimeout(() => els.queueStatus.classList.remove('show'), delay);
+    }
+
+    function enqueueAutoReply(item, editor, button) {
+      const replyText = (editor.value || '').trim();
+      if (!replyText) { showToast('回复内容是空的'); return; }
+      if (button.dataset.queued === '1') { showToast('已在队列中'); return; }
+      if (replyQuotaLeft() <= 0) {
+        showToast(`今天已发 ${REPLY_DAILY_CAP} 条，明天再来`);
         return;
       }
-      const oldText = button.textContent;
+      button.dataset.queued = '1';
       button.disabled = true;
-      button.textContent = '发送中';
+      button.textContent = '排队中';
+      replyQueue.push({ item, editor, button });
+      runReplyQueue();
+    }
+
+    async function sendAutoReply(url, text) {
+      const response = await fetch('/api/auto-reply', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url, text })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || `自动回复失败：${response.status}`);
+      }
+      return data;
+    }
+
+    async function runReplyQueue() {
+      if (replyQueueRunning) return;
+      replyQueueRunning = true;
       try {
-        const response = await fetch('/api/auto-reply', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ url: item.url, text: replyText })
-        });
-        const data = await response.json();
-        if (!response.ok || !data.ok) {
-          throw new Error(data.error || `自动回复失败：${response.status}`);
+        while (replyQueue.length) {
+          // 单日封顶：到顶就把剩余任务全部退回，停止发送
+          if (replyQuotaLeft() <= 0) {
+            setQueueStatus(`今日已达上限 ${REPLY_DAILY_CAP} 条，剩 ${replyQueue.length} 条已取消`);
+            while (replyQueue.length) {
+              const job = replyQueue.shift();
+              job.button.dataset.queued = '';
+              job.button.disabled = false;
+              job.button.textContent = '今日已满';
+            }
+            hideQueueStatus(4000);
+            break;
+          }
+
+          const job = replyQueue.shift();
+          const replyText = (job.editor.value || '').trim();
+          if (!replyText) {
+            job.button.dataset.queued = '';
+            job.button.disabled = false;
+            job.button.textContent = '内容为空';
+            continue;
+          }
+
+          job.button.textContent = '发送中';
+          setQueueStatus(`正在发送…（队列还剩 ${replyQueue.length} 条）`);
+          try {
+            await sendAutoReply(job.item.url, replyText);
+            const used = bumpReplyQuota();
+            job.button.textContent = '已发送';
+            showToast(`已自动回复（今日 ${used}/${REPLY_DAILY_CAP}）`);
+          } catch (error) {
+            job.button.dataset.queued = '';
+            job.button.disabled = false;
+            job.button.textContent = '重试自动回复';
+            showToast(error.message || '自动回复失败');
+          }
+
+          // 还有下一条：随机间隔 + 倒计时，把节奏压成真人手速
+          if (replyQueue.length && replyQuotaLeft() > 0) {
+            const gap = REPLY_MIN_GAP_MS + Math.floor(Math.random() * (REPLY_MAX_GAP_MS - REPLY_MIN_GAP_MS + 1));
+            const until = Date.now() + gap;
+            while (Date.now() < until) {
+              const left = Math.ceil((until - Date.now()) / 1000);
+              setQueueStatus(`下一条 ~${left}s 后发送（队列还剩 ${replyQueue.length} 条・今日剩 ${replyQuotaLeft()} 条）`);
+              await waitMs(1000);
+            }
+          }
         }
-        button.textContent = '已发送';
-        showToast('已自动回复');
-      } catch (error) {
-        button.disabled = false;
-        button.textContent = oldText;
-        showToast(error.message || '自动回复失败');
+      } finally {
+        replyQueueRunning = false;
+        if (!replyQueue.length) {
+          setQueueStatus('队列已清空');
+          hideQueueStatus();
+        }
       }
     }
 
