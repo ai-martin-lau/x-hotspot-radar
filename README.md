@@ -1,3 +1,7 @@
+<p align="center">
+  <a href="README.md">简体中文</a> · <a href="README_EN.md">English</a> · <a href="README_JA.md">日本語</a> · <a href="README_KO.md">한국어</a> · <a href="README_ES.md">Español</a>
+</p>
+
 # X Hotspot Radar
 
 一个本地运行的 X/Twitter 热点雷达，用来发现更值得回复的帖子。
