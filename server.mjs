@@ -799,7 +799,7 @@ async function handleScan(req, res) {
   const jobs = selected.map((keyword) => {
     const query = buildQuery({
       keyword,
-      lang: payload.lang || 'zh',
+      lang: payload.lang ?? 'zh',
       minFav: payload.minFav ?? 20,
       since: payload.since || '',
       exclude: payload.exclude || '-filter:replies',
