@@ -138,3 +138,7 @@ npm start
 ## License
 
 MIT
+
+## Historial de estrellas
+
+[![Gráfico de historial de estrellas](https://api.star-history.com/svg?repos=ai-martin-lau/x-hotspot-radar&type=Date)](https://star-history.com/#ai-martin-lau/x-hotspot-radar&Date)
