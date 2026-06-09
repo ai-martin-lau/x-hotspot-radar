@@ -967,6 +967,14 @@ function runClaude(prompt) {
   });
 }
 
+// 返回「真正发给 Claude 的那段 prompt」原文，供前端「复制提示」复用——
+// 和「生成回复」共用 buildClaudeReplyPrompt，两边永远逐字一致，不会再漂移。
+async function handleReplyPrompt(req, res) {
+  const body = await readBody(req);
+  const payload = body ? JSON.parse(body) : {};
+  sendJson(res, { ok: true, prompt: buildClaudeReplyPrompt(payload) });
+}
+
 async function handleReply(req, res) {
   const body = await readBody(req);
   const payload = body ? JSON.parse(body) : {};
@@ -1060,6 +1068,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.url === '/api/reply' && req.method === 'POST') {
       await handleReply(req, res);
+      return;
+    }
+    if (req.url === '/api/reply-prompt' && req.method === 'POST') {
+      await handleReplyPrompt(req, res);
       return;
     }
     if (req.url === '/api/auto-reply' && req.method === 'POST') {

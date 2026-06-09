@@ -1767,14 +1767,16 @@
       return `${(n * 100).toFixed(1)}%`;
     }
 
-    function buildReplyPrompt(item) {
-      return [
-        '帮我给这条 X 写一条高质量回复。',
-        '要求：用原帖的主要语言回复（英文推就用英文，中文就用中文，其它语言就用该语言）；像真人，不要客套，不要营销腔；最好补充一个具体观点、经验或反例。',
-        `原帖作者：${[item.author, item.handle].filter(Boolean).join(' ')}`,
-        `原帖链接：${item.url}`,
-        `原帖内容：${item.text}`
-      ].join('\n');
+    // 「复制提示」和「生成回复」喂给后端的是同一份 payload，确保两边 prompt 完全一致。
+    function replyPayload(fullItem) {
+      return {
+        author: fullItem.author,
+        handle: fullItem.handle,
+        url: fullItem.url,
+        keyword: fullItem.keyword,
+        keywords: fullItem.keywords?.join(' / ') || fullItem.keyword || '',
+        text: fullItem.text
+      };
     }
 
     async function hydratePostText(item) {
@@ -1805,7 +1807,16 @@
       button.textContent = '补全文';
       try {
         const fullItem = await hydratePostText(item);
-        copyText(buildReplyPrompt(fullItem));
+        const response = await fetch('/api/reply-prompt', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(replyPayload(fullItem))
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok || !String(data.prompt || '').trim()) {
+          throw new Error(data.error || '获取提示失败');
+        }
+        copyText(data.prompt);
       } catch (error) {
         showToast(error.message || '原帖补全文失败');
       } finally {
@@ -1829,14 +1840,7 @@
         const response = await fetch('/api/reply', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            author: fullItem.author,
-            handle: fullItem.handle,
-            url: fullItem.url,
-            keyword: fullItem.keyword,
-            keywords: fullItem.keywords?.join(' / ') || fullItem.keyword || '',
-            text: fullItem.text
-          })
+          body: JSON.stringify(replyPayload(fullItem))
         });
         const data = await response.json();
         if (!response.ok || !data.ok) {
