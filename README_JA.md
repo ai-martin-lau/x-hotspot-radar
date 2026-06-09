@@ -138,3 +138,7 @@ npm start
 ## License
 
 MIT
+
+## スター推移
+
+[![スター推移グラフ](https://api.star-history.com/svg?repos=ai-martin-lau/x-hotspot-radar&type=Date)](https://star-history.com/#ai-martin-lau/x-hotspot-radar&Date)
