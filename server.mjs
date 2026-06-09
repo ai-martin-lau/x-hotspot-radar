@@ -886,6 +886,7 @@ function buildClaudeReplyPrompt(payload) {
     '可以认同、可以补充、也可以提不同看法，但出发点是交流而不是抬杠或说教。友善但不油腻。',
     '',
     '硬性要求：',
+    '- 动笔前先用 WebSearch 联网搜索原帖涉及的产品、版本、数据或最新动态，基于搜到的最新事实回复，绝不依赖可能过时的记忆；搜索只是中间步骤，不要把搜索过程或来源写进回复，最终只输出回复正文。',
     '- 只输出回复正文，不要解释，不要标题，不要编号，不要引号。',
     '- 用原帖的主要语言回复：原帖主要是英文就用英文，中文就用中文，其它语言就用该语言（拿不准时用英文）。',
     '- 像真人说话，不要营销腔，不要空洞夸赞（中文别用"学习了/很棒/太强了/感谢分享"，英文别用"Great post/Thanks for sharing/So insightful"这类）。',
@@ -920,7 +921,10 @@ function runClaude(prompt) {
       // 注意：anthropic API 直连会 403（地区墙），必须保留 http_proxy 走代理认证——所以这里不动 env 的代理。
       '--strict-mcp-config',
       '--setting-sources',
-      'project'
+      'project',
+      // 放行联网搜索：生成回复前先查最新信息，避免基于过时知识答复（会略微变慢，可接受）。
+      '--allowedTools',
+      'WebSearch WebFetch'
     ], {
       cwd: ROOT,
       env: {
