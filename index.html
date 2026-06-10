@@ -633,6 +633,20 @@
       background: rgba(255, 184, 0, 0.22);
     }
 
+    .section-head {
+      margin: 18px 0 4px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.04);
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--ink, #1a1a1a);
+    }
+
+    .section-head:first-of-type {
+      margin-top: 8px;
+    }
+
     .opp-text {
       margin: 0;
       color: #242426;
@@ -1727,10 +1741,16 @@
 
     function renderOpportunities(results, scanned, filteredCount = 0, strategy = 'default', safetyFilteredCount = 0, whitelistedCount = 0) {
       currentView = 'results';
+      // 盯人区（白名单直扫，按时间新→旧）置顶，话题战场（按热度）在下
+      const watchItems = results.filter((item) => item.whitelisted)
+        .sort((a, b) => (Number(a.ageHours) || 999) - (Number(b.ageHours) || 999));
+      const topicItems = results.filter((item) => !item.whitelisted);
+      const ordered = [...watchItems, ...topicItems];
       const useful = results.filter((item) => item.label !== '略过').length;
+      const watchSuffix = watchItems.length ? ` · 盯人 ${watchItems.length} 条` : '';
       els.countText.textContent = strategy === 'replySurf'
-        ? `${results.length} 个回复机会 · ${useful} 个优先`
-        : `${results.length} 条帖子 · ${useful} 条可看`;
+        ? `${results.length} 个回复机会 · ${useful} 个优先${watchSuffix}`
+        : `${results.length} 条帖子 · ${useful} 条可看${watchSuffix}`;
 
       const scanSummary = scanned.map((item) => {
         const suffix = item.error ? `失败：${item.error}` : `${item.count} 条`;
@@ -1752,7 +1772,10 @@
 
       els.queryList.innerHTML = `
         <p class="scan-note">${strategy === 'replySurf' ? '找回复机会：优先看热度分高、流量池大、领域相关的帖子。' : '本次扫描：'}${escapeHtml(scanSummary)}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}${escapeHtml(whitelistSummary)}</p>
-        ${results.map((item, index) => renderOpportunityCard(item, index)).join('')}
+        ${watchItems.length ? `<div class="section-head">🎯 盯人区 · ${watchItems.length} 条 · 白名单最新帖，按时间倒序</div>` : ''}
+        ${watchItems.map((item, index) => renderOpportunityCard(item, index)).join('')}
+        ${watchItems.length && topicItems.length ? `<div class="section-head">🔥 话题战场 · ${topicItems.length} 条 · 按热度排序</div>` : ''}
+        ${topicItems.map((item, index) => renderOpportunityCard(item, watchItems.length + index)).join('')}
       `;
 
       els.queryList.querySelectorAll('[data-open-url]').forEach((button) => {
@@ -1762,7 +1785,7 @@
         const textEl = card.querySelector('[data-opp-text]');
         const toggle = card.querySelector('[data-opp-toggle]');
         if (!textEl || !toggle) return;
-        const item = results[i];
+        const item = ordered[i];
         const truncated = !!(item && item.truncated && item.url);
         // 被 X 折叠(truncated)或纯排版超长(overflow)时，显示「展开全文」
         if (truncated || textEl.scrollHeight - textEl.clientHeight > 4) {
@@ -1795,11 +1818,11 @@
         });
       });
       els.queryList.querySelectorAll('[data-copy-reply]').forEach((button) => {
-        const item = results[Number(button.dataset.copyReply)];
+        const item = ordered[Number(button.dataset.copyReply)];
         button.addEventListener('click', () => copyReplyPrompt(item, button));
       });
       els.queryList.querySelectorAll('[data-generate-reply]').forEach((button) => {
-        const item = results[Number(button.dataset.generateReply)];
+        const item = ordered[Number(button.dataset.generateReply)];
         button.addEventListener('click', () => generateReply(item, button));
       });
     }
@@ -1819,6 +1842,7 @@
           <p class="opp-text clamped" data-opp-text>${escapeHtml(item.text || '')}</p>
           <button class="opp-toggle" type="button" data-opp-toggle hidden>展开全文</button>
           <div class="metrics">
+            ${item.whitelisted ? `<span class="metric">${escapeHtml(formatAge(item.ageHours))}</span>` : ''}
             <span class="metric">热度 ${escapeHtml(item.hotScore ?? 0)}</span>
             <span class="metric">${escapeHtml(item.trafficPool || '流量池未知')}</span>
             <span class="metric">浏览 ${escapeHtml(item.viewsText || item.views || 0)}</span>
@@ -1849,6 +1873,14 @@
       const n = Number(value);
       if (!Number.isFinite(n) || n <= 0) return '0%';
       return `${(n * 100).toFixed(1)}%`;
+    }
+
+    function formatAge(hours) {
+      const n = Number(hours);
+      if (!Number.isFinite(n) || n <= 0) return '刚刚';
+      if (n < 1) return `${Math.max(1, Math.round(n * 60))} 分钟前`;
+      if (n < 24) return `${Math.round(n)} 小时前`;
+      return `${Math.round(n / 24)} 天前`;
     }
 
     // 「复制提示」和「生成回复」喂给后端的是同一份 payload，确保两边 prompt 完全一致。

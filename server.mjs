@@ -888,7 +888,11 @@ async function handleScan(req, res) {
     safetyFilteredCount,
     whitelistedCount,
     scanned,
-    results: results.slice(0, 80),
+    // 盯人帖永不截断，话题帖最多 80 条
+    results: [
+      ...results.filter((item) => item.whitelisted),
+      ...results.filter((item) => !item.whitelisted).slice(0, 80),
+    ],
   });
 }
 
