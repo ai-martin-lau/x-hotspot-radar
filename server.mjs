@@ -385,6 +385,18 @@ function isBlacklistedPost(post, blacklist) {
   });
 }
 
+function isWhitelistedPost(post, whitelist) {
+  if (!whitelist.length) return false;
+  const handle = String(post.handle || '').toLowerCase();
+  const author = String(post.author || '').toLowerCase();
+  const haystack = `${author} ${handle}`;
+  return whitelist.some((term) => {
+    if (!term) return false;
+    if (term.startsWith('@')) return handle === term || haystack.includes(term);
+    return haystack.includes(term);
+  });
+}
+
 function isUnsafeReplyTarget(post) {
   const text = String(post.text || '').toLowerCase();
   return [
@@ -778,6 +790,7 @@ async function handleScan(req, res) {
   const payload = body ? JSON.parse(body) : {};
   const keywords = Array.isArray(payload.keywords) ? payload.keywords.map((item) => String(item).trim()).filter(Boolean) : [];
   const blacklist = normalizeBlacklist(payload.blacklist);
+  const whitelist = normalizeBlacklist(payload.whitelist);
   const strategy = payload.strategy === 'replySurf' ? 'replySurf' : 'default';
   const offset = Math.max(0, Math.min(Number(payload.offset) || 0, keywords.length));
   const remaining = Math.max(keywords.length - offset, 1);
@@ -817,11 +830,18 @@ async function handleScan(req, res) {
   const allPosts = [];
   let filteredCount = 0;
   let safetyFilteredCount = 0;
+  let whitelistedCount = 0;
   for (const job of jobs) {
     const result = await scanQuery(job);
-    const visiblePosts = result.posts.filter((post) => !isBlacklistedPost(post, blacklist));
-    const safePosts = visiblePosts.filter((post) => !isUnsafeReplyTarget(post));
-    filteredCount += result.posts.length - visiblePosts.length;
+    // 白名单作者直通：跳过黑名单/敏感过滤，且不会被「略过」丢弃
+    const posts = result.posts.map((post) => {
+      if (!isWhitelistedPost(post, whitelist)) return post;
+      whitelistedCount += 1;
+      return { ...post, whitelisted: true, label: post.label === '略过' ? '看看' : post.label };
+    });
+    const visiblePosts = posts.filter((post) => post.whitelisted || !isBlacklistedPost(post, blacklist));
+    const safePosts = visiblePosts.filter((post) => post.whitelisted || !isUnsafeReplyTarget(post));
+    filteredCount += posts.length - visiblePosts.length;
     safetyFilteredCount += visiblePosts.length - safePosts.length;
     scanned.push({
       keyword: result.keyword,
@@ -835,7 +855,7 @@ async function handleScan(req, res) {
 
   let results = dedupeAndRank(allPosts, strategy);
   if (strategy === 'replySurf') {
-    results = results.filter((item) => item.label !== '略过');
+    results = results.filter((item) => item.whitelisted || item.label !== '略过');
   }
 
   sendJson(res, {
@@ -846,6 +866,7 @@ async function handleScan(req, res) {
     strategy,
     filteredCount,
     safetyFilteredCount,
+    whitelistedCount,
     scanned,
     results: results.slice(0, 80),
   });

@@ -628,6 +628,11 @@
       background: rgba(0, 0, 0, 0.06);
     }
 
+    .badge.whitelist {
+      color: #6b4d00;
+      background: rgba(255, 184, 0, 0.22);
+    }
+
     .opp-text {
       margin: 0;
       color: #242426;
@@ -1027,6 +1032,31 @@
 
         <div class="panel-inner" style="border-top: 1px solid rgba(0,0,0,0.06);">
           <div class="panel-title">
+            <h2>白名单</h2>
+            <span class="quiet" id="whitelistSavedText"></span>
+          </div>
+          <div class="preset">
+            <div class="preset-head blacklist-head">
+              <div class="preset-summary">
+                <strong id="whitelistSummaryTitle">0 条规则</strong>
+                <span id="whitelistSummaryPreview">未设置白名单</span>
+              </div>
+              <button class="text-btn" type="button" id="whitelistEditBtn">编辑</button>
+            </div>
+            <div class="preset-editor" id="whitelistEditor" hidden>
+              <div class="field" style="margin-bottom: 0;">
+                <label for="whitelistInput">规则</label>
+                <textarea id="whitelistInput" placeholder="一行一个，例如：&#10;@some_handle&#10;某个昵称"></textarea>
+              </div>
+              <div class="preset-actions">
+                <span class="quiet">白名单作者的帖子直通结果，不受黑名单 / 敏感词 / 略过过滤，自动保存。</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-inner" style="border-top: 1px solid rgba(0,0,0,0.06);">
+          <div class="panel-title">
             <h2>关键词组</h2>
             <div class="keyword-toolbar">
               <span class="quiet" id="presetSavedText"></span>
@@ -1054,6 +1084,7 @@
   <script>
     const STORAGE_KEY = 'xRadarSettings.v1';
     const DEFAULT_BLACKLIST = '';
+    const DEFAULT_WHITELIST = '';
     // 自动回复串行队列：一次只发一条，条间随机间隔，单日封顶——节奏压成真人手速，避免突发并发像 bot。
     const REPLY_MIN_GAP_MS = 40000;   // 条与条之间最短间隔
     const REPLY_MAX_GAP_MS = 120000;  // 条与条之间最长间隔
@@ -1103,6 +1134,12 @@
       blacklistSummaryTitle: document.getElementById('blacklistSummaryTitle'),
       blacklistSummaryPreview: document.getElementById('blacklistSummaryPreview'),
       blacklistSavedText: document.getElementById('blacklistSavedText'),
+      whitelistInput: document.getElementById('whitelistInput'),
+      whitelistEditor: document.getElementById('whitelistEditor'),
+      whitelistEditBtn: document.getElementById('whitelistEditBtn'),
+      whitelistSummaryTitle: document.getElementById('whitelistSummaryTitle'),
+      whitelistSummaryPreview: document.getElementById('whitelistSummaryPreview'),
+      whitelistSavedText: document.getElementById('whitelistSavedText'),
       keywordExamples: document.querySelectorAll('[data-keyword-example]'),
       presetList: document.getElementById('presetList'),
       presetSavedText: document.getElementById('presetSavedText'),
@@ -1127,6 +1164,8 @@
     let savedTimer = 0;
     let blacklistTimer = 0;
     let editingBlacklist = false;
+    let whitelistTimer = 0;
+    let editingWhitelist = false;
     const editingPresets = new Set();
     const postTextCache = new Map();
 
@@ -1150,6 +1189,7 @@
           filter: saved.filter || 'live',
           custom: saved.custom || '',
           blacklist: normalizeBlacklistText(saved.blacklist ?? DEFAULT_BLACKLIST),
+          whitelist: normalizeBlacklistText(saved.whitelist ?? DEFAULT_WHITELIST),
           scrolls: saved.scrolls ?? 4,
           presets: normalizePresets(saved.presets, saved.enabled)
         };
@@ -1162,6 +1202,7 @@
           filter: 'live',
           custom: '',
           blacklist: DEFAULT_BLACKLIST,
+          whitelist: DEFAULT_WHITELIST,
           scrolls: 4,
           presets: normalizePresets()
         };
@@ -1189,6 +1230,14 @@
       clearTimeout(blacklistTimer);
       blacklistTimer = setTimeout(() => {
         els.blacklistSavedText.textContent = '';
+      }, 1500);
+    }
+
+    function markWhitelistSaved() {
+      els.whitelistSavedText.textContent = '已保存';
+      clearTimeout(whitelistTimer);
+      whitelistTimer = setTimeout(() => {
+        els.whitelistSavedText.textContent = '';
       }, 1500);
     }
 
@@ -1235,6 +1284,13 @@
 
     function getBlacklistTerms() {
       return uniq(String(state.blacklist || '')
+        .split(/\n|,|，/)
+        .map((item) => item.trim())
+        .filter(Boolean));
+    }
+
+    function getWhitelistTerms() {
+      return uniq(String(state.whitelist || '')
         .split(/\n|,|，/)
         .map((item) => item.trim())
         .filter(Boolean));
@@ -1375,6 +1431,14 @@
       els.blacklistEditor.hidden = !editingBlacklist;
     }
 
+    function renderWhitelist() {
+      const terms = getWhitelistTerms();
+      els.whitelistSummaryTitle.textContent = terms.length ? `${terms.length} 条规则` : '未设置白名单';
+      els.whitelistSummaryPreview.textContent = terms.length ? terms.slice(0, 4).join(' / ') : '所有帖子正常过滤';
+      els.whitelistEditBtn.textContent = editingWhitelist ? '收起' : '编辑';
+      els.whitelistEditor.hidden = !editingWhitelist;
+    }
+
     function findPreset(id) {
       return state.presets.find((preset) => preset.id === id);
     }
@@ -1452,8 +1516,10 @@
       els.excludeInput.value = state.exclude;
       els.customKeywords.value = state.custom;
       els.blacklistInput.value = state.blacklist;
+      els.whitelistInput.value = state.whitelist;
       els.scrollInput.value = state.scrolls;
       renderBlacklist();
+      renderWhitelist();
 
       document.querySelectorAll('.segment').forEach((button) => {
         button.classList.toggle('active', button.dataset.filter === activeFilter);
@@ -1501,6 +1567,18 @@
         renderBlacklist();
       });
 
+      els.whitelistInput.addEventListener('input', () => {
+        state.whitelist = els.whitelistInput.value;
+        saveState();
+        markWhitelistSaved();
+        renderWhitelist();
+      });
+
+      els.whitelistEditBtn.addEventListener('click', () => {
+        editingWhitelist = !editingWhitelist;
+        renderWhitelist();
+      });
+
       els.keywordExamples.forEach((button) => {
         button.addEventListener('click', () => addTemporaryKeyword(button.dataset.keywordExample));
       });
@@ -1539,10 +1617,12 @@
 
       els.resetBtn.addEventListener('click', () => {
         const keepBlacklist = state.blacklist;
+        const keepWhitelist = state.whitelist;
         const keepPresets = state.presets;
         localStorage.removeItem(STORAGE_KEY);
         state = loadState();
         state.blacklist = keepBlacklist;
+        state.whitelist = keepWhitelist;
         state.presets = keepPresets;
         saveState();
         activeFilter = state.filter;
@@ -1562,9 +1642,12 @@
       els.excludeInput.value = state.exclude;
       els.customKeywords.value = state.custom;
       els.blacklistInput.value = state.blacklist;
+      els.whitelistInput.value = state.whitelist;
       els.scrollInput.value = state.scrolls;
       editingBlacklist = false;
+      editingWhitelist = false;
       renderBlacklist();
+      renderWhitelist();
       document.querySelectorAll('.segment').forEach((button) => {
         button.classList.toggle('active', button.dataset.filter === activeFilter);
       });
@@ -1605,6 +1688,7 @@
         since: state.since,
         exclude: state.exclude,
         blacklist: getBlacklistTerms(),
+        whitelist: getWhitelistTerms(),
         filter: activeFilter,
         strategy
       };
@@ -1626,7 +1710,7 @@
         if (!response.ok || !data.ok) {
           throw new Error(data.error || `扫描失败：${response.status}`);
         }
-        renderOpportunities(data.results || [], data.scanned || [], data.filteredCount || 0, strategy, data.safetyFilteredCount || 0);
+        renderOpportunities(data.results || [], data.scanned || [], data.filteredCount || 0, strategy, data.safetyFilteredCount || 0, data.whitelistedCount || 0);
       } catch (error) {
         els.countText.textContent = '扫描失败';
         els.queryList.innerHTML = `
@@ -1641,7 +1725,7 @@
       }
     }
 
-    function renderOpportunities(results, scanned, filteredCount = 0, strategy = 'default', safetyFilteredCount = 0) {
+    function renderOpportunities(results, scanned, filteredCount = 0, strategy = 'default', safetyFilteredCount = 0, whitelistedCount = 0) {
       currentView = 'results';
       const useful = results.filter((item) => item.label !== '略过').length;
       els.countText.textContent = strategy === 'replySurf'
@@ -1654,19 +1738,20 @@
       }).join(' · ');
       const blacklistSummary = filteredCount ? ` · 黑名单已过滤 ${filteredCount} 条` : '';
       const safetySummary = safetyFilteredCount ? ` · 敏感内容已过滤 ${safetyFilteredCount} 条` : '';
+      const whitelistSummary = whitelistedCount ? ` · 白名单直通 ${whitelistedCount} 条` : '';
 
       if (!results.length) {
         els.queryList.innerHTML = `
           <p class="scan-note">
             没扫到符合条件的帖子。可以降低最低点赞、把结果类型切回 Latest，或者减少排除条件。<br>
-            本次扫描：${escapeHtml(scanSummary || '无结果')}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}
+            本次扫描：${escapeHtml(scanSummary || '无结果')}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}${escapeHtml(whitelistSummary)}
           </p>
         `;
         return;
       }
 
       els.queryList.innerHTML = `
-        <p class="scan-note">${strategy === 'replySurf' ? '找回复机会：优先看热度分高、流量池大、领域相关的帖子。' : '本次扫描：'}${escapeHtml(scanSummary)}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}</p>
+        <p class="scan-note">${strategy === 'replySurf' ? '找回复机会：优先看热度分高、流量池大、领域相关的帖子。' : '本次扫描：'}${escapeHtml(scanSummary)}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}${escapeHtml(whitelistSummary)}</p>
         ${results.map((item, index) => renderOpportunityCard(item, index)).join('')}
       `;
 
@@ -1729,7 +1814,7 @@
               <strong>${index + 1}. ${escapeHtml(author || '未知作者')}</strong>
               <span>关键词：${escapeHtml(keywords)} · 相关度 ${Number(item.relevance || 0)} · 互动率 ${formatPercent(item.engagementRate)}</span>
             </div>
-            <span class="badge ${labelClass(item.label)}">${escapeHtml(item.label)}</span>
+            <span style="display:inline-flex;gap:6px;">${item.whitelisted ? '<span class="badge whitelist">白名单</span>' : ''}<span class="badge ${labelClass(item.label)}">${escapeHtml(item.label)}</span></span>
           </div>
           <p class="opp-text clamped" data-opp-text>${escapeHtml(item.text || '')}</p>
           <button class="opp-toggle" type="button" data-opp-toggle hidden>展开全文</button>
