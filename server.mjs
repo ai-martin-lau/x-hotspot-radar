@@ -826,6 +826,26 @@ async function handleScan(req, res) {
     };
   });
 
+  // 白名单=盯人：对每个 @handle 直扫其最新原创（from:@handle），
+  // 不带关键词、不带最低点赞、不带语言限制——只受时间限制。
+  // 只在第一批（offset=0）跑一次，避免分批扫描时重复。
+  if (offset === 0) {
+    const watchHandles = whitelist.filter((term) => term.startsWith('@')).map((term) => term.slice(1)).filter(Boolean);
+    for (const handle of watchHandles) {
+      const query = [
+        `from:${handle}`,
+        payload.since ? `since:${payload.since}` : '',
+        payload.exclude || '-filter:replies',
+      ].filter(Boolean).join(' ');
+      jobs.push({
+        keyword: `@${handle}`,
+        query,
+        url: buildSearchUrl(query, 'live'),
+        scrolls: Math.min(scrolls, 2),
+      });
+    }
+  }
+
   const scanned = [];
   const allPosts = [];
   let filteredCount = 0;
