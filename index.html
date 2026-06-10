@@ -1104,6 +1104,8 @@
     const REPLY_MAX_GAP_MS = 120000;  // 条与条之间最长间隔
     const REPLY_QUOTA_KEY = 'xRadarReplyQuota.v1';   // 仅用于「今日已发 N 条」计数展示，不再做总量上限
     const REPLY_QUEUE_KEY = 'xRadarReplyQueue.v1';
+    // 已回复记忆：点过「打开原帖 / 生成回复 / 复制提示」的帖子 id，下次扫描话题区自动剔除、盯人区标灰
+    const REPLIED_KEY = 'xRadarRepliedPosts.v1';
     const defaultPresets = [
       {
         id: 'zh-ai',
@@ -1742,9 +1744,14 @@
     function renderOpportunities(results, scanned, filteredCount = 0, strategy = 'default', safetyFilteredCount = 0, whitelistedCount = 0) {
       currentView = 'results';
       // 盯人区（白名单直扫，按时间新→旧）置顶，话题战场（按热度）在下
+      const repliedMap = getRepliedMap();
+      const isReplied = (item) => Boolean(item.id && repliedMap[String(item.id)]);
       const watchItems = results.filter((item) => item.whitelisted)
+        .map((item) => (isReplied(item) ? { ...item, replied: true } : item))
         .sort((a, b) => (Number(a.ageHours) || 999) - (Number(b.ageHours) || 999));
-      const topicItems = results.filter((item) => !item.whitelisted);
+      const topicAll = results.filter((item) => !item.whitelisted);
+      const topicItems = topicAll.filter((item) => !isReplied(item));
+      const repliedSkipped = topicAll.length - topicItems.length;
       const ordered = [...watchItems, ...topicItems];
       const useful = results.filter((item) => item.label !== '略过').length;
       const watchSuffix = watchItems.length ? ` · 盯人 ${watchItems.length} 条` : '';
@@ -1759,19 +1766,20 @@
       const blacklistSummary = filteredCount ? ` · 黑名单已过滤 ${filteredCount} 条` : '';
       const safetySummary = safetyFilteredCount ? ` · 敏感内容已过滤 ${safetyFilteredCount} 条` : '';
       const whitelistSummary = whitelistedCount ? ` · 白名单直通 ${whitelistedCount} 条` : '';
+      const repliedSummary = repliedSkipped ? ` · 已回过剔除 ${repliedSkipped} 条` : '';
 
       if (!results.length) {
         els.queryList.innerHTML = `
           <p class="scan-note">
             没扫到符合条件的帖子。可以降低最低点赞、把结果类型切回 Latest，或者减少排除条件。<br>
-            本次扫描：${escapeHtml(scanSummary || '无结果')}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}${escapeHtml(whitelistSummary)}
+            本次扫描：${escapeHtml(scanSummary || '无结果')}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}${escapeHtml(whitelistSummary)}${escapeHtml(repliedSummary)}
           </p>
         `;
         return;
       }
 
       els.queryList.innerHTML = `
-        <p class="scan-note">${strategy === 'replySurf' ? '找回复机会：优先看热度分高、流量池大、领域相关的帖子。' : '本次扫描：'}${escapeHtml(scanSummary)}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}${escapeHtml(whitelistSummary)}</p>
+        <p class="scan-note">${strategy === 'replySurf' ? '找回复机会：优先看热度分高、流量池大、领域相关的帖子。' : '本次扫描：'}${escapeHtml(scanSummary)}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}${escapeHtml(whitelistSummary)}${escapeHtml(repliedSummary)}</p>
         ${watchItems.length ? `<div class="section-head">🎯 盯人区 · ${watchItems.length} 条 · 白名单最新帖，按时间倒序</div>` : ''}
         ${watchItems.map((item, index) => renderOpportunityCard(item, index)).join('')}
         ${watchItems.length && topicItems.length ? `<div class="section-head">🔥 话题战场 · ${topicItems.length} 条 · 按热度排序</div>` : ''}
@@ -1779,7 +1787,10 @@
       `;
 
       els.queryList.querySelectorAll('[data-open-url]').forEach((button) => {
-        button.addEventListener('click', () => window.open(button.dataset.openUrl, '_blank', 'noopener,noreferrer'));
+        button.addEventListener('click', () => {
+          markReplied(button.dataset.postId);
+          window.open(button.dataset.openUrl, '_blank', 'noopener,noreferrer');
+        });
       });
       els.queryList.querySelectorAll('.opportunity-card').forEach((card, i) => {
         const textEl = card.querySelector('[data-opp-text]');
@@ -1819,11 +1830,17 @@
       });
       els.queryList.querySelectorAll('[data-copy-reply]').forEach((button) => {
         const item = ordered[Number(button.dataset.copyReply)];
-        button.addEventListener('click', () => copyReplyPrompt(item, button));
+        button.addEventListener('click', () => {
+          if (item) markReplied(item.id);
+          copyReplyPrompt(item, button);
+        });
       });
       els.queryList.querySelectorAll('[data-generate-reply]').forEach((button) => {
         const item = ordered[Number(button.dataset.generateReply)];
-        button.addEventListener('click', () => generateReply(item, button));
+        button.addEventListener('click', () => {
+          if (item) markReplied(item.id);
+          generateReply(item, button);
+        });
       });
     }
 
@@ -1837,7 +1854,7 @@
               <strong>${index + 1}. ${escapeHtml(author || '未知作者')}</strong>
               <span>关键词：${escapeHtml(keywords)} · 相关度 ${Number(item.relevance || 0)} · 互动率 ${formatPercent(item.engagementRate)}</span>
             </div>
-            <span style="display:inline-flex;gap:6px;">${item.whitelisted ? '<span class="badge whitelist">白名单</span>' : ''}<span class="badge ${labelClass(item.label)}">${escapeHtml(item.label)}</span></span>
+            <span style="display:inline-flex;gap:6px;">${item.replied ? '<span class="badge skip">已回过</span>' : ''}${item.whitelisted ? '<span class="badge whitelist">白名单</span>' : ''}<span class="badge ${labelClass(item.label)}">${escapeHtml(item.label)}</span></span>
           </div>
           <p class="opp-text clamped" data-opp-text>${escapeHtml(item.text || '')}</p>
           <button class="opp-toggle" type="button" data-opp-toggle hidden>展开全文</button>
@@ -1853,7 +1870,7 @@
           </div>
           <p class="quiet">建议：${escapeHtml(item.replyHint || '看语境后再回复')}</p>
           <div class="opp-actions">
-            <button class="mini-btn" type="button" data-open-url="${escapeHtml(item.url || '')}">打开原帖</button>
+            <button class="mini-btn" type="button" data-open-url="${escapeHtml(item.url || '')}" data-post-id="${escapeHtml(String(item.id || ''))}">打开原帖</button>
             <button class="mini-btn" type="button" data-generate-reply="${index}">生成回复</button>
             <button class="mini-btn ghost" type="button" data-copy-reply="${index}">复制提示</button>
           </div>
@@ -1873,6 +1890,20 @@
       const n = Number(value);
       if (!Number.isFinite(n) || n <= 0) return '0%';
       return `${(n * 100).toFixed(1)}%`;
+    }
+
+    function getRepliedMap() {
+      try { return JSON.parse(localStorage.getItem(REPLIED_KEY) || '{}'); } catch (_) { return {}; }
+    }
+
+    function markReplied(id) {
+      const key = String(id || '').trim();
+      if (!key) return;
+      const map = getRepliedMap();
+      map[key] = Date.now();
+      // 只留最近 2000 条，防止无限膨胀
+      const entries = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 2000);
+      localStorage.setItem(REPLIED_KEY, JSON.stringify(Object.fromEntries(entries)));
     }
 
     function formatAge(hours) {

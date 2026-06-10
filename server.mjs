@@ -413,14 +413,24 @@ function computeRelevance(text, keyword) {
   return domainMatches + keywordMatch;
 }
 
-function computeHotScore(post, velocity, relevance, engagement, engagementRate) {
+function computeHotScore(post, velocity, relevance, engagement, engagementRate, ageHours = 24) {
   const views = Number(post.views) || 0;
+  const replies = Number(post.replies) || 0;
   const viewScore = Math.min(34, Math.log10(Math.max(views, 1)) * 6.5);
   const velocityScore = Math.min(34, Math.log10(Math.max(velocity, 1)) * 7);
   const engagementScore = Math.min(18, Math.log10(Math.max(engagement, 1)) * 5);
   const relevanceScore = Math.min(14, Math.max(0, relevance) * 2.5);
   const rateBoost = engagementRate >= 0.03 ? 6 : engagementRate >= 0.015 ? 3 : 0;
-  return Math.min(100, Math.round(viewScore + velocityScore + engagementScore + relevanceScore + rateBoost));
+  // 卡位：衡量的是「你的回复能分到多少」而不只是帖子本身的流量。
+  // 浏览高但评论区还空 → 能卡进前排；评论区已挤爆 → 回复沉底没人看。
+  const slotBoost = views >= 20000 && replies < 30 ? 8 : 0;
+  const crowdPenalty = replies >= 200 ? 12 : replies >= 80 ? 6 : 0;
+  // 新鲜度：只追爬坡期。velocity 是均值，分不清上升还是退潮，用帖龄补刀。
+  const freshBoost = ageHours < 6 ? 8 : 0;
+  const stalePenalty = ageHours > 24 ? 10 : 0;
+  const raw = viewScore + velocityScore + engagementScore + relevanceScore + rateBoost
+    + slotBoost + freshBoost - crowdPenalty - stalePenalty;
+  return Math.max(0, Math.min(100, Math.round(raw)));
 }
 
 function getTrafficPool(post, velocity) {
@@ -430,7 +440,10 @@ function getTrafficPool(post, velocity) {
   return '小流量池';
 }
 
-function getReplyHint(relevance, engagementRate) {
+function getReplyHint(relevance, engagementRate, repliesCount = 0, views = 0, ageHours = 24) {
+  if (views >= 20000 && repliesCount < 30 && ageHours <= 6) return '评论区还空着，前排卡位窗口，尽快回';
+  if (repliesCount >= 200) return '评论区已挤爆，回复会沉底，慎入';
+  if (ageHours > 24) return '帖子已过峰，吃的是退潮流量，优先找更新鲜的';
   if (relevance >= 4) return '补一个具体经验或反例，别写泛泛赞同';
   if (engagementRate >= 0.03) return '评论区互动高，适合用鲜明判断切入';
   return '先看原帖语境，能自然接上再回复';
@@ -448,7 +461,12 @@ function enrichPost(post, keyword) {
   else if (relevance > 0 && (velocity >= 1000 || post.views >= 20000 || engagement >= 200)) label = '可回';
   else if (relevance > 0 && (velocity >= 300 || engagementRate >= 0.02)) label = '看看';
   else if (velocity >= 10000 && engagementRate >= 0.01) label = '看看';
-  const hotScore = computeHotScore(post, velocity, relevance, engagement, engagementRate);
+  // 卡位/新鲜度降档：评论区太挤（回复≥200）或已过峰（>24h）的帖，你的回复吃不到流量
+  const repliesCount = Number(post.replies) || 0;
+  const DOWNGRADE = { '必回': '可回', '可回': '看看', '看看': '略过' };
+  if (label !== '略过' && repliesCount >= 200) label = DOWNGRADE[label];
+  if (label !== '略过' && ageHours > 24) label = DOWNGRADE[label];
+  const hotScore = computeHotScore(post, velocity, relevance, engagement, engagementRate, ageHours);
 
   return {
     ...post,
@@ -462,7 +480,7 @@ function enrichPost(post, keyword) {
     viewsText: compactNumber(post.views),
     hotScore,
     trafficPool: getTrafficPool(post, velocity),
-    replyHint: getReplyHint(relevance, engagementRate),
+    replyHint: getReplyHint(relevance, engagementRate, repliesCount, Number(post.views) || 0, ageHours),
     label,
   };
 }
