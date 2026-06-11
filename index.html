@@ -1771,12 +1771,17 @@
     function renderOpportunities(results, scanned, filteredCount = 0, strategy = 'default', safetyFilteredCount = 0, whitelistedCount = 0) {
       currentView = 'results';
       lastScanData = { results, scanned, filteredCount, strategy, safetyFilteredCount, whitelistedCount };
-      // 盯人区（白名单直扫，按时间新→旧）置顶，话题战场（按热度）在下
+      // 盯人区（白名单直扫）置顶：先按标签权重（必回>可回>看看>略过），同级再按时间新→旧；话题战场（按热度）在下
       const repliedMap = getRepliedMap();
       const isReplied = (item) => Boolean(item.id && repliedMap[String(item.id)]);
+      const LABEL_ORDER = { '必回': 4, '可回': 3, '看看': 2, '略过': 1 };
       const watchItems = results.filter((item) => item.whitelisted)
         .map((item) => (isReplied(item) ? { ...item, replied: true } : item))
-        .sort((a, b) => (Number(a.ageHours) || 999) - (Number(b.ageHours) || 999));
+        .sort((a, b) => {
+          const byLabel = (LABEL_ORDER[b.label] || 0) - (LABEL_ORDER[a.label] || 0);
+          if (byLabel) return byLabel;
+          return (Number(a.ageHours) || 999) - (Number(b.ageHours) || 999);
+        });
       const topicAll = results.filter((item) => !item.whitelisted);
       const topicItems = topicAll.filter((item) => !isReplied(item));
       const repliedSkipped = topicAll.length - topicItems.length;
@@ -1819,7 +1824,7 @@
       els.queryList.innerHTML = `
         <p class="scan-note">${strategy === 'replySurf' ? '找回复机会：优先看热度分高、流量池大、领域相关的帖子。' : '本次扫描：'}${escapeHtml(scanSummary)}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}${escapeHtml(whitelistSummary)}${escapeHtml(repliedSummary)}</p>
         ${filterBar}
-        ${showWatch.length ? `<div class="section-head">🎯 盯人区 · ${showWatch.length} 条 · 白名单最新帖，按时间倒序</div>` : ''}
+        ${showWatch.length ? `<div class="section-head">🎯 盯人区 · ${showWatch.length} 条 · 必回优先，同级按时间倒序</div>` : ''}
         ${showWatch.map((item, index) => renderOpportunityCard(item, index)).join('')}
         ${showTopic.length && showWatch.length ? `<div class="section-head">🔥 话题战场 · ${showTopic.length} 条 · 按热度排序</div>` : ''}
         ${showTopic.map((item, index) => renderOpportunityCard(item, showWatch.length + index)).join('')}
