@@ -816,8 +816,10 @@ async function handleScan(req, res) {
   const limit = Math.max(1, Math.min(Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : remaining, remaining));
   const scrolls = Math.max(1, Math.min(Number(payload.scrolls) || 4, 10));
   const selected = keywords.slice(offset, offset + limit);
-  if (!selected.length) {
-    sendJson(res, { ok: false, error: '没有关键词' }, 400);
+  // 纯盯人模式：没有关键词但白名单有 @handle 时照常扫（只跑盯人直扫那一段）
+  const watchHandlesEarly = whitelist.filter((term) => term.startsWith('@'));
+  if (!selected.length && !(offset === 0 && watchHandlesEarly.length)) {
+    sendJson(res, { ok: false, error: '没有关键词，白名单也没有 @handle' }, 400);
     return;
   }
 
