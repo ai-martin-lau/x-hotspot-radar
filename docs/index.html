@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>X Hotspot Radar - X 热点雷达</title>
+  <meta name="description" content="本地运行的 X/Twitter 热点雷达，用自己的 Chrome 登录态扫描正在起量的帖子，按浏览量、流速和互动率筛选值得回复的机会。">
+  <link rel="canonical" href="https://ai-martin-lau.github.io/x-hotspot-radar/">
+
+  <meta property="og:site_name" content="X Hotspot Radar">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ai-martin-lau.github.io/x-hotspot-radar/">
+  <meta property="og:title" content="X Hotspot Radar - X 热点雷达">
+  <meta property="og:description" content="本地运行的 X/Twitter 热点雷达：少刷信息流，多写真正值得写的回复。">
+  <meta property="og:image" content="https://ai-martin-lau.github.io/x-hotspot-radar/cover.png?v=20260611">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta property="og:image:alt" content="X Hotspot Radar social preview image">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="X Hotspot Radar - X 热点雷达">
+  <meta name="twitter:description" content="本地运行的 X/Twitter 热点雷达：少刷信息流，多写真正值得写的回复。">
+  <meta name="twitter:image" content="https://ai-martin-lau.github.io/x-hotspot-radar/cover.png?v=20260611">
+  <meta name="twitter:image:alt" content="X Hotspot Radar social preview image">
+
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07100c;
+      --text: #effff4;
+      --muted: #a4c9b1;
+      --line: rgba(58, 255, 142, 0.24);
+      --green: #3aff8e;
+      --amber: #ffb347;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+      letter-spacing: 0;
+    }
+
+    main {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: minmax(420px, 70vh) auto;
+    }
+
+    .hero {
+      position: relative;
+      display: grid;
+      align-items: end;
+      overflow: hidden;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .hero img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(7, 16, 12, 0.04), rgba(7, 16, 12, 0.82));
+    }
+
+    .hero-content,
+    .body {
+      width: min(1080px, calc(100vw - 40px));
+      margin: 0 auto;
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      padding: 0 0 40px;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 760px;
+      font-size: clamp(42px, 7vw, 86px);
+      line-height: 0.96;
+      font-weight: 800;
+    }
+
+    p {
+      margin: 18px 0 0;
+      max-width: 680px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.65;
+    }
+
+    .body {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 28px 0 36px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .meta span {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: rgba(58, 255, 142, 0.07);
+    }
+
+    a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 0 18px;
+      border-radius: 8px;
+      background: var(--green);
+      color: #04130c;
+      font-weight: 750;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 720px) {
+      main {
+        grid-template-rows: minmax(360px, 62vh) auto;
+      }
+
+      .body {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      a {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero" aria-label="X Hotspot Radar preview">
+      <img src="./cover.png" alt="X Hotspot Radar social preview">
+      <div class="hero-content">
+        <h1>X Hotspot Radar</h1>
+        <p>本地运行的 X/Twitter 热点雷达，用自己的 Chrome 登录态发现更值得回复的帖子。</p>
+      </div>
+    </section>
+
+    <section class="body" aria-label="Repository link">
+      <div class="meta">
+        <span>Local Chrome CDP</span>
+        <span>No auto-post</span>
+        <span>MIT Open Source</span>
+      </div>
+      <a href="https://github.com/ai-martin-lau/x-hotspot-radar">Open GitHub Repo</a>
+    </section>
+  </main>
+</body>
+</html>
