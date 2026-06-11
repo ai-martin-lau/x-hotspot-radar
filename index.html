@@ -1715,8 +1715,10 @@
       }
 
       const keywords = getKeywords();
-      if (!keywords.length) {
-        showToast('先输入关键词');
+      // 白名单有 @handle 时允许纯盯人扫描（不需要关键词）；两个都空才拦
+      const hasWatchHandles = getWhitelistTerms().some((term) => term.startsWith('@'));
+      if (!keywords.length && !hasWatchHandles) {
+        showToast('关键词和白名单都是空的，至少填一个');
         return;
       }
 
