@@ -1070,20 +1070,18 @@
         <div class="panel-inner" style="border-top: 1px solid rgba(0,0,0,0.06);">
           <div class="panel-title">
             <h2>白名单</h2>
-            <div class="keyword-toolbar">
-              <span class="quiet" id="whitelistSavedText"></span>
-              <label class="switch" aria-label="白名单总开关（盯人模式）">
-                <input type="checkbox" id="whitelistToggle" checked>
-                <span class="knob"></span>
-              </label>
-            </div>
+            <span class="quiet" id="whitelistSavedText"></span>
           </div>
           <div class="preset">
-            <div class="preset-head blacklist-head">
+            <div class="preset-head">
               <div class="preset-summary">
                 <strong id="whitelistSummaryTitle">0 条规则</strong>
                 <span id="whitelistSummaryPreview">未设置白名单</span>
               </div>
+              <label class="switch" aria-label="白名单总开关（盯人模式）">
+                <input type="checkbox" id="whitelistToggle" checked>
+                <span class="knob"></span>
+              </label>
               <button class="text-btn" type="button" id="whitelistEditBtn">编辑</button>
             </div>
             <div class="preset-editor" id="whitelistEditor" hidden>
