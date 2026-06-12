@@ -1070,7 +1070,13 @@
         <div class="panel-inner" style="border-top: 1px solid rgba(0,0,0,0.06);">
           <div class="panel-title">
             <h2>白名单</h2>
-            <span class="quiet" id="whitelistSavedText"></span>
+            <div class="keyword-toolbar">
+              <span class="quiet" id="whitelistSavedText"></span>
+              <label class="switch" aria-label="白名单总开关（盯人模式）">
+                <input type="checkbox" id="whitelistToggle" checked>
+                <span class="knob"></span>
+              </label>
+            </div>
           </div>
           <div class="preset">
             <div class="preset-head blacklist-head">
@@ -1179,6 +1185,7 @@
       whitelistSummaryTitle: document.getElementById('whitelistSummaryTitle'),
       whitelistSummaryPreview: document.getElementById('whitelistSummaryPreview'),
       whitelistSavedText: document.getElementById('whitelistSavedText'),
+      whitelistToggle: document.getElementById('whitelistToggle'),
       keywordExamples: document.querySelectorAll('[data-keyword-example]'),
       presetList: document.getElementById('presetList'),
       presetSavedText: document.getElementById('presetSavedText'),
@@ -1231,6 +1238,7 @@
           custom: saved.custom || '',
           blacklist: normalizeBlacklistText(saved.blacklist ?? DEFAULT_BLACKLIST),
           whitelist: normalizeBlacklistText(saved.whitelist ?? DEFAULT_WHITELIST),
+          whitelistEnabled: saved.whitelistEnabled !== false,
           scrolls: saved.scrolls ?? 4,
           presets: normalizePresets(saved.presets, saved.enabled)
         };
@@ -1244,6 +1252,7 @@
           custom: '',
           blacklist: DEFAULT_BLACKLIST,
           whitelist: DEFAULT_WHITELIST,
+          whitelistEnabled: true,
           scrolls: 4,
           presets: normalizePresets()
         };
@@ -1474,8 +1483,15 @@
 
     function renderWhitelist() {
       const terms = getWhitelistTerms();
-      els.whitelistSummaryTitle.textContent = terms.length ? `${terms.length} 条规则` : '未设置白名单';
-      els.whitelistSummaryPreview.textContent = terms.length ? terms.slice(0, 4).join(' / ') : '所有帖子正常过滤';
+      const on = state.whitelistEnabled !== false;
+      els.whitelistToggle.checked = on;
+      if (!on) {
+        els.whitelistSummaryTitle.textContent = '已关闭';
+        els.whitelistSummaryPreview.textContent = terms.length ? `保留 ${terms.length} 条规则 · 扫描时不盯人` : '盯人功能已关闭';
+      } else {
+        els.whitelistSummaryTitle.textContent = terms.length ? `${terms.length} 条规则` : '未设置白名单';
+        els.whitelistSummaryPreview.textContent = terms.length ? terms.slice(0, 4).join(' / ') : '所有帖子正常过滤';
+      }
       els.whitelistEditBtn.textContent = editingWhitelist ? '收起' : '编辑';
       els.whitelistEditor.hidden = !editingWhitelist;
     }
@@ -1620,6 +1636,15 @@
         renderWhitelist();
       });
 
+      els.whitelistToggle.addEventListener('change', () => {
+        state.whitelistEnabled = els.whitelistToggle.checked;
+        saveState();
+        markWhitelistSaved();
+        renderWhitelist();
+        nextIndex = 0;
+        refreshCurrentView();
+      });
+
       els.keywordExamples.forEach((button) => {
         button.addEventListener('click', () => addTemporaryKeyword(button.dataset.keywordExample));
       });
@@ -1659,11 +1684,13 @@
       els.resetBtn.addEventListener('click', () => {
         const keepBlacklist = state.blacklist;
         const keepWhitelist = state.whitelist;
+        const keepWhitelistEnabled = state.whitelistEnabled;
         const keepPresets = state.presets;
         localStorage.removeItem(STORAGE_KEY);
         state = loadState();
         state.blacklist = keepBlacklist;
         state.whitelist = keepWhitelist;
+        state.whitelistEnabled = keepWhitelistEnabled;
         state.presets = keepPresets;
         saveState();
         activeFilter = state.filter;
@@ -1715,8 +1742,10 @@
       }
 
       const keywords = getKeywords();
+      // 白名单总开关关闭时，本次扫描完全忽略白名单（不盯人、不直通）
+      const watchTerms = state.whitelistEnabled !== false ? getWhitelistTerms() : [];
       // 白名单有 @handle 时允许纯盯人扫描（不需要关键词）；两个都空才拦
-      const hasWatchHandles = getWhitelistTerms().some((term) => term.startsWith('@'));
+      const hasWatchHandles = watchTerms.some((term) => term.startsWith('@'));
       if (!keywords.length && !hasWatchHandles) {
         showToast('关键词和白名单都是空的，至少填一个');
         return;
@@ -1731,7 +1760,7 @@
         since: state.since,
         exclude: state.exclude,
         blacklist: getBlacklistTerms(),
-        whitelist: getWhitelistTerms(),
+        whitelist: watchTerms,
         filter: activeFilter,
         strategy
       };
