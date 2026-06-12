@@ -1637,7 +1637,6 @@
       els.whitelistToggle.addEventListener('change', () => {
         state.whitelistEnabled = els.whitelistToggle.checked;
         saveState();
-        markWhitelistSaved();
         renderWhitelist();
         nextIndex = 0;
         refreshCurrentView();
