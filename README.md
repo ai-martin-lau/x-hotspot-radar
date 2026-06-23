@@ -1,34 +1,36 @@
 <p align="center">
-  <a href="README.md">简体中文</a> · <a href="README_EN.md">English</a> · <a href="README_JA.md">日本語</a> · <a href="README_KO.md">한국어</a> · <a href="README_ES.md">Español</a>
+  <a href="README.md">English</a> · <a href="README_ZH.md">简体中文</a> · <a href="README_JA.md">日本語</a> · <a href="README_KO.md">한국어</a> · <a href="README_ES.md">Español</a>
 </p>
 
-<p align="center"><img src="docs/cover.png" alt="X Hotspot Radar" width="100%"></p>
+<p align="center">
+  <img src="docs/cover.png" alt="X Hotspot Radar" width="100%">
+</p>
 
 # X Hotspot Radar
 
-一个本地运行的 X/Twitter 热点雷达，用来发现更值得回复的帖子。
+A locally-run hotspot radar for X/Twitter that helps you find posts more worth replying to.
 
-它不自动发帖、不自动评论，也不绕过 X 的限制。它做的事情很简单：用你自己的 Chrome 登录态打开 X 搜索页，自动滚动、提取公开帖子数据，然后按浏览量、流速、互动率和领域相关度排序，帮你少刷信息流，多写几条真正值得写的回复。
+It does not auto-post, does not auto-comment, and does not bypass X's limits. What it does is simple: using your own logged-in Chrome session, it opens X search pages, scrolls automatically, extracts public post data, and then ranks posts by view count, velocity, engagement rate, and topical relevance—helping you scroll the feed less and write more replies that are actually worth writing.
 
-## 功能
+## Features
 
-- 扫描 X 搜索结果，找到正在起量的帖子
-- 支持自定义关键词组，一行一个关键词
-- 支持黑名单，按昵称或 `@handle` 过滤作者
-- 默认过滤成人/敏感内容
-- 按热度、流速、互动率、相关度给出回复优先级
-- 复制提示或生成回复前，会先打开原帖详情页补全文
-- 可选调用本地 Claude Code 生成中文回复草稿
-- 所有评论都需要人工确认后再发布
+- Scans X search results to find posts that are gaining traction
+- Supports custom keyword groups, one keyword per line
+- Supports a blocklist, filtering authors by nickname or `@handle`
+- Filters out adult/sensitive content by default
+- Assigns reply priority based on heat, velocity, engagement rate, and relevance
+- Opens the original post's detail page to fetch the full text before copying a prompt or generating a reply
+- Optionally calls local Claude Code to generate a reply draft
+- Every comment requires manual confirmation before publishing
 
-## 适合谁
+## Who It's For
 
-- 正在运营 X/Twitter 的 AI builder
-- 做 build in public、独立开发、AI 接单、跨境电商内容的人
-- 想在大 V 评论区写高质量回复，而不是随手刷屏的人
-- 已经有 Claude Code，希望复用本地额度生成回复草稿的人
+- AI builders actively running an X/Twitter account
+- People creating content around build in public, indie development, AI freelancing, and cross-border e-commerce
+- People who want to write high-quality replies in big accounts' comment sections, rather than mindlessly spamming the feed
+- People who already have Claude Code and want to reuse their local quota to generate reply drafts
 
-## 工作方式
+## How It Works
 
 ```mermaid
 flowchart LR
@@ -41,24 +43,24 @@ flowchart LR
   G --> H["Optional Claude Code Draft"]
 ```
 
-## 环境要求
+## Requirements
 
 - Node.js 22+
 - Google Chrome
-- 一个已登录 X 的 Chrome 会话
-- 可选：Claude Code CLI，用于生成回复草稿
+- A Chrome session already logged in to X
+- Optional: Claude Code CLI, for generating reply drafts
 
-## 快速开始
+## Quick Start
 
-1. 安装依赖
+1. Install dependencies
 
 ```bash
 npm install
 ```
 
-当前项目没有第三方 npm 依赖，运行 `npm install` 只是为了生成本地 npm 状态。
+This project currently has no third-party npm dependencies; running `npm install` is only to generate the local npm state.
 
-2. 启动带远程调试端口的 Chrome
+2. Launch Chrome with the remote debugging port
 
 macOS:
 
@@ -68,70 +70,70 @@ open -na "Google Chrome" --args \
   --user-data-dir="$HOME/.x-hotspot-radar-chrome"
 ```
 
-第一次打开时，Chrome 可能会询问是否允许远程调试。允许后，在这个 Chrome 窗口登录 X。
+The first time you open it, Chrome may ask whether to allow remote debugging. After allowing it, log in to X in this Chrome window.
 
-3. 启动雷达
+3. Start the radar
 
 ```bash
 npm start
 ```
 
-4. 打开本地页面
+4. Open the local page
 
 [http://127.0.0.1:8787](http://127.0.0.1:8787)
 
-## 使用方式
+## Usage
 
-1. 保留默认关键词组，或自己编辑关键词组
-2. 有临时热点时，在「临时关键词」里一行写一个关键词
-3. 需要过滤某些作者时，在「黑名单」里一行写一个昵称或 `@handle`
-4. 点击「找回复机会」
-5. 优先查看「必回」和「可回」
-6. 如需草稿，点击「生成回复」
-7. 人工判断后再去 X 发布
+1. Keep the default keyword groups, or edit the keyword groups yourself
+2. When there's a temporary hot topic, add one keyword per line in "临时关键词" (Temporary Keywords)
+3. When you need to filter certain authors, add one nickname or `@handle` per line in "黑名单" (Blocklist)
+4. Click "找回复机会" (Find Reply Opportunities)
+5. Prioritize reviewing "必回" (Must Reply) and "可回" (Worth Replying)
+6. If you want a draft, click "生成回复" (Generate Reply)
+7. Use your own judgment before publishing on X
 
-## Claude Code 回复草稿
+## Claude Code Reply Drafts
 
-项目默认调用本机的 `claude` 命令：
+By default, the project calls the local `claude` command:
 
 ```bash
 claude -p "写一条中文回复"
 ```
 
-如果你的 Claude Code 不在 PATH 里，可以通过环境变量指定：
+If your Claude Code is not in PATH, you can specify it via an environment variable:
 
 ```bash
 CLAUDE_BIN=/path/to/claude npm start
 ```
 
-如果没有 Claude Code，扫描和排序仍然可以正常使用，只是不能自动生成回复草稿。
+Without Claude Code, scanning and ranking still work normally; you just can't auto-generate reply drafts.
 
-## 环境变量
+## Environment Variables
 
-| 变量 | 默认值 | 说明 |
+| Variable | Default | Description |
 | --- | --- | --- |
-| `PORT` | `8787` | 本地服务端口 |
-| `CHROME_DEBUG_PORT` | `9222` | Chrome 远程调试端口 |
-| `CHROME_DEBUG_URL` | `http://127.0.0.1:9222` | Chrome DevTools 地址 |
-| `CDP_PROXY_URL` | 空 | 可选的 CDP 代理地址 |
-| `CLAUDE_BIN` | `claude` | Claude Code CLI 路径 |
+| `PORT` | `8787` | Local service port |
+| `CHROME_DEBUG_PORT` | `9222` | Chrome remote debugging port |
+| `CHROME_DEBUG_URL` | `http://127.0.0.1:9222` | Chrome DevTools address |
+| `CDP_PROXY_URL` | empty | Optional CDP proxy address |
+| `CLAUDE_BIN` | `claude` | Claude Code CLI path |
 
-## 注意事项
+## Notes
 
-- 这个项目只读取你自己 Chrome 里能看到的 X 页面，不使用 X 官方 API。
-- 不建议高频、大规模抓取；请尊重 X 的服务条款和平台规则。
-- 生成的回复只是草稿，不应无脑发布。
-- 本项目不会保存你的 X 密码、Cookie 或 Claude 凭据。
+- This project only reads X pages that you can see in your own Chrome; it does not use X's official API.
+- High-frequency, large-scale scraping is not recommended; please respect X's Terms of Service and platform rules.
+- Generated replies are only drafts and should not be published blindly.
+- This project does not store your X password, cookies, or Claude credentials.
 
-## 开发
+## Development
 
-语法检查：
+Syntax check:
 
 ```bash
 npm run check
 ```
 
-本地启动：
+Start locally:
 
 ```bash
 npm start
@@ -141,6 +143,6 @@ npm start
 
 MIT
 
-## Star 趋势
+## Star History
 
-[![Star 趋势图](https://api.star-history.com/svg?repos=ai-martin-lau/x-hotspot-radar&type=Date)](https://star-history.com/#ai-martin-lau/x-hotspot-radar&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=ai-martin-lau/x-hotspot-radar&type=Date)](https://star-history.com/#ai-martin-lau/x-hotspot-radar&Date)

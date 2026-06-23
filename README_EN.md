@@ -1,5 +1,9 @@
 <p align="center">
-  <a href="README.md">简体中文</a> · <a href="README_EN.md">English</a> · <a href="README_JA.md">日本語</a> · <a href="README_KO.md">한국어</a> · <a href="README_ES.md">Español</a>
+  <a href="README.md">English</a> · <a href="README_ZH.md">简体中文</a> · <a href="README_JA.md">日本語</a> · <a href="README_KO.md">한국어</a> · <a href="README_ES.md">Español</a>
+</p>
+
+<p align="center">
+  <img src="docs/cover.png" alt="X Hotspot Radar" width="100%">
 </p>
 
 # X Hotspot Radar
@@ -16,7 +20,7 @@ It does not auto-post, does not auto-comment, and does not bypass X's limits. Wh
 - Filters out adult/sensitive content by default
 - Assigns reply priority based on heat, velocity, engagement rate, and relevance
 - Opens the original post's detail page to fetch the full text before copying a prompt or generating a reply
-- Optionally calls local Claude Code to generate a Chinese reply draft
+- Optionally calls local Claude Code to generate a reply draft
 - Every comment requires manual confirmation before publishing
 
 ## Who It's For
