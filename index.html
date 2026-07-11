@@ -1084,13 +1084,17 @@
               </label>
               <button class="text-btn" type="button" id="whitelistEditBtn">编辑</button>
             </div>
+            <div class="preset-actions" style="padding-top: 6px; gap: 14px;">
+              <label class="quiet" style="cursor:pointer; user-select:none;"><input type="checkbox" id="whitelistZhToggle" checked style="vertical-align:-2px;"> 中文圈</label>
+              <label class="quiet" style="cursor:pointer; user-select:none;"><input type="checkbox" id="whitelistEnToggle" checked style="vertical-align:-2px;"> 英文圈</label>
+            </div>
             <div class="preset-editor" id="whitelistEditor" hidden>
               <div class="field" style="margin-bottom: 0;">
                 <label for="whitelistInput">规则</label>
-                <textarea id="whitelistInput" placeholder="一行一个，例如：&#10;@some_handle&#10;某个昵称"></textarea>
+                <textarea id="whitelistInput" placeholder="用 [中文圈] / [英文圈] 分组，一行一个：&#10;[中文圈]&#10;@some_handle&#10;[英文圈]&#10;@another_handle"></textarea>
               </div>
               <div class="preset-actions">
-                <span class="quiet">白名单 = 盯人：每次扫描自动直扫 @handle 的最新帖（只受时间限制，无关键词 / 点赞门槛），并直通黑名单 / 敏感词 / 略过过滤。自动保存。</span>
+                <span class="quiet">白名单 = 盯人：每次扫描自动直扫 @handle 的最新帖（只受时间限制，无关键词 / 点赞门槛），并直通黑名单 / 敏感词 / 略过过滤。用 [中文圈] [英文圈] 两个小节分组，上方勾选框控制本次扫哪组；节外的行不分组、总开关开着就扫。自动保存。</span>
               </div>
             </div>
           </div>
@@ -1125,7 +1129,31 @@
   <script>
     const STORAGE_KEY = 'xRadarSettings.v1';
     const DEFAULT_BLACKLIST = '';
-    const DEFAULT_WHITELIST = '';
+    const DEFAULT_WHITELIST = [
+      '[中文圈]',
+      '@dotey',
+      '@op7418',
+      '@vista8',
+      '@oran_ge',
+      '@ezshine',
+      '@zarazhangrui',
+      '[英文圈]',
+      '@gregisenberg',
+      '@swyx',
+      '@marc_louvion',
+      '@tdinh_me',
+      '@dannypostmaa',
+      '@mattshumer_',
+      '@bentossell',
+      '@rowancheung',
+      '@mckaywrigley',
+      '@alexalbert__',
+      '@levelsio',
+      '@karpathy',
+      '@shl',
+      '@packyM',
+      '@garrytan'
+    ].join('\n');
     // 自动回复串行队列：一次只发一条，条间随机间隔，单日封顶——节奏压成真人手速，避免突发并发像 bot。
     const REPLY_MIN_GAP_MS = 40000;   // 条与条之间最短间隔
     const REPLY_MAX_GAP_MS = 120000;  // 条与条之间最长间隔
@@ -1184,6 +1212,8 @@
       whitelistSummaryPreview: document.getElementById('whitelistSummaryPreview'),
       whitelistSavedText: document.getElementById('whitelistSavedText'),
       whitelistToggle: document.getElementById('whitelistToggle'),
+      whitelistZhToggle: document.getElementById('whitelistZhToggle'),
+      whitelistEnToggle: document.getElementById('whitelistEnToggle'),
       keywordExamples: document.querySelectorAll('[data-keyword-example]'),
       presetList: document.getElementById('presetList'),
       presetSavedText: document.getElementById('presetSavedText'),
@@ -1235,8 +1265,10 @@
           filter: saved.filter || 'live',
           custom: saved.custom || '',
           blacklist: normalizeBlacklistText(saved.blacklist ?? DEFAULT_BLACKLIST),
-          whitelist: normalizeBlacklistText(saved.whitelist ?? DEFAULT_WHITELIST),
+          whitelist: migrateWhitelist(saved.whitelist),
           whitelistEnabled: saved.whitelistEnabled !== false,
+          whitelistZhEnabled: saved.whitelistZhEnabled !== false,
+          whitelistEnEnabled: saved.whitelistEnEnabled !== false,
           scrolls: saved.scrolls ?? 4,
           presets: normalizePresets(saved.presets, saved.enabled)
         };
@@ -1251,6 +1283,8 @@
           blacklist: DEFAULT_BLACKLIST,
           whitelist: DEFAULT_WHITELIST,
           whitelistEnabled: true,
+          whitelistZhEnabled: true,
+          whitelistEnEnabled: true,
           scrolls: 4,
           presets: normalizePresets()
         };
@@ -1263,6 +1297,22 @@
 
     function normalizeBlacklistText(value) {
       return String(value || '').trim();
+    }
+
+    // 老版白名单（无分组）一次性迁移：原有行放在最顶部的「节外通用区」（总开关开着就扫，行为不变），
+    // 下面接上带 [中文圈]/[英文圈] 的默认分组模板；已经有分组标记的直接原样返回。
+    function migrateWhitelist(savedValue) {
+      const legacy = normalizeBlacklistText(savedValue);
+      if (savedValue === undefined || savedValue === null) return DEFAULT_WHITELIST;
+      if (/^\s*\[.+\]\s*$/m.test(legacy)) return legacy;
+      if (!legacy) return DEFAULT_WHITELIST;
+      const defaultLines = DEFAULT_WHITELIST.split('\n');
+      const seen = new Set(legacy.split(/\n|,|，/).map((l) => l.trim().toLowerCase()).filter(Boolean));
+      const merged = defaultLines.filter((line) => {
+        const key = line.trim().toLowerCase();
+        return /^\[.+\]$/.test(line.trim()) || !seen.has(key);
+      });
+      return legacy + '\n' + merged.join('\n');
     }
 
     function markSaved(text = '已保存') {
@@ -1337,11 +1387,34 @@
         .filter(Boolean));
     }
 
+    // 把白名单文本解析成 {generic, zh, en} 三组：
+    // [中文圈]（或含「中」的节名）→ zh；[英文圈]/[EN]（含「英」或 en）→ en；第一个节标记之前的行 → generic。
+    function parseWhitelistGroups() {
+      const groups = { generic: [], zh: [], en: [] };
+      let bucket = 'generic';
+      String(state.whitelist || '').split('\n').forEach((rawLine) => {
+        const line = rawLine.trim();
+        if (!line) return;
+        const header = line.match(/^\[(.+)\]$/);
+        if (header) {
+          const name = header[1].trim().toLowerCase();
+          bucket = (name.includes('英') || name.includes('en')) ? 'en'
+            : (name.includes('中') || name.includes('zh')) ? 'zh'
+            : 'generic';
+          return;
+        }
+        line.split(/,|，/).map((item) => item.trim()).filter(Boolean)
+          .forEach((item) => groups[bucket].push(item));
+      });
+      return groups;
+    }
+
     function getWhitelistTerms() {
-      return uniq(String(state.whitelist || '')
-        .split(/\n|,|，/)
-        .map((item) => item.trim())
-        .filter(Boolean));
+      const groups = parseWhitelistGroups();
+      const terms = [...groups.generic];
+      if (state.whitelistZhEnabled !== false) terms.push(...groups.zh);
+      if (state.whitelistEnEnabled !== false) terms.push(...groups.en);
+      return uniq(terms);
     }
 
     function quoteIfNeeded(keyword) {
@@ -1480,15 +1553,21 @@
     }
 
     function renderWhitelist() {
+      const groups = parseWhitelistGroups();
       const terms = getWhitelistTerms();
       const on = state.whitelistEnabled !== false;
       els.whitelistToggle.checked = on;
+      els.whitelistZhToggle.checked = state.whitelistZhEnabled !== false;
+      els.whitelistEnToggle.checked = state.whitelistEnEnabled !== false;
+      els.whitelistZhToggle.disabled = !on;
+      els.whitelistEnToggle.disabled = !on;
+      const groupText = `中文 ${groups.zh.length} / 英文 ${groups.en.length}${groups.generic.length ? ` / 通用 ${groups.generic.length}` : ''}`;
       if (!on) {
         els.whitelistSummaryTitle.textContent = '已关闭';
-        els.whitelistSummaryPreview.textContent = terms.length ? `保留 ${terms.length} 条规则 · 扫描时不盯人` : '盯人功能已关闭';
+        els.whitelistSummaryPreview.textContent = terms.length ? `保留 ${groupText} · 扫描时不盯人` : '盯人功能已关闭';
       } else {
-        els.whitelistSummaryTitle.textContent = terms.length ? `${terms.length} 条规则` : '未设置白名单';
-        els.whitelistSummaryPreview.textContent = terms.length ? terms.slice(0, 4).join(' / ') : '所有帖子正常过滤';
+        els.whitelistSummaryTitle.textContent = terms.length ? `本次盯 ${terms.length} 人` : '未设置白名单';
+        els.whitelistSummaryPreview.textContent = terms.length ? groupText : '所有帖子正常过滤';
       }
       els.whitelistEditBtn.textContent = editingWhitelist ? '收起' : '编辑';
       els.whitelistEditor.hidden = !editingWhitelist;
@@ -1634,6 +1713,20 @@
         renderWhitelist();
       });
 
+      els.whitelistZhToggle.addEventListener('change', () => {
+        state.whitelistZhEnabled = els.whitelistZhToggle.checked;
+        saveState();
+        markWhitelistSaved();
+        renderWhitelist();
+      });
+
+      els.whitelistEnToggle.addEventListener('change', () => {
+        state.whitelistEnEnabled = els.whitelistEnToggle.checked;
+        saveState();
+        markWhitelistSaved();
+        renderWhitelist();
+      });
+
       els.whitelistToggle.addEventListener('change', () => {
         state.whitelistEnabled = els.whitelistToggle.checked;
         saveState();
@@ -1682,12 +1775,16 @@
         const keepBlacklist = state.blacklist;
         const keepWhitelist = state.whitelist;
         const keepWhitelistEnabled = state.whitelistEnabled;
+        const keepWhitelistZhEnabled = state.whitelistZhEnabled;
+        const keepWhitelistEnEnabled = state.whitelistEnEnabled;
         const keepPresets = state.presets;
         localStorage.removeItem(STORAGE_KEY);
         state = loadState();
         state.blacklist = keepBlacklist;
         state.whitelist = keepWhitelist;
         state.whitelistEnabled = keepWhitelistEnabled;
+        state.whitelistZhEnabled = keepWhitelistZhEnabled;
+        state.whitelistEnEnabled = keepWhitelistEnEnabled;
         state.presets = keepPresets;
         saveState();
         activeFilter = state.filter;
