@@ -113,6 +113,14 @@ Claude Code가 없어도 스캔과 정렬은 정상적으로 사용할 수 있�
 | `CHROME_DEBUG_URL` | `http://127.0.0.1:9222` | Chrome DevTools 주소 |
 | `CDP_PROXY_URL` | 비어 있음 | 선택적 CDP 프록시 주소 |
 | `CLAUDE_BIN` | `claude` | Claude Code CLI 경로 |
+| `XQUIK_API_KEY` | 비어 있음 | API 스캔용 선택적 Xquik API 키 |
+| `XQUIK_API_BASE_URL` | `https://xquik.com/api/v1` | Xquik REST API 기본 URL |
+
+## 선택적 Xquik 스캔
+
+Chrome은 계속 기본 스캔 소스입니다. Xquik을 사용하려면 `XQUIK_API_KEY`를 설정하고 로컬 서버를 다시 시작한 뒤 Advanced Filters에서 Search Source를 `Xquik API`로 바꾸세요.
+
+Xquik 스캔은 키워드 그룹, 최소 좋아요, 블랙리스트, 화이트리스트, 기존 순위 계산을 재사용합니다. Xquik 소스는 게시물 검색 결과를 반환하므로 `People` 유형은 계속 Chrome 전용입니다.
 
 ## 주의 사항
 
@@ -139,6 +147,4 @@ npm start
 
 MIT
 
-## 스타 히스토리
-
-[![스타 히스토리 차트](https://api.star-history.com/svg?repos=ai-martin-lau/x-hotspot-radar&type=Date)](https://star-history.com/#ai-martin-lau/x-hotspot-radar&Date)
+Xquik is an independent third-party service. Not affiliated with X Corp. "Twitter" and "X" are trademarks of X Corp.

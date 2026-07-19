@@ -21,6 +21,7 @@ It does not auto-post, does not auto-comment, and does not bypass X's limits. Wh
 - Assigns reply priority based on heat, velocity, engagement rate, and relevance
 - Opens the original post's detail page to fetch the full text before copying a prompt or generating a reply
 - Optionally calls local Claude Code to generate a reply draft
+- Optionally uses Xquik API as the scan source when an API key is configured
 - Every comment requires manual confirmation before publishing
 
 ## Who It's For
@@ -117,6 +118,14 @@ Without Claude Code, scanning and ranking still work normally; you just can't au
 | `CHROME_DEBUG_URL` | `http://127.0.0.1:9222` | Chrome DevTools address |
 | `CDP_PROXY_URL` | empty | Optional CDP proxy address |
 | `CLAUDE_BIN` | `claude` | Claude Code CLI path |
+| `XQUIK_API_KEY` | empty | Optional Xquik API key for API-backed scans |
+| `XQUIK_API_BASE_URL` | `https://xquik.com/api/v1` | Xquik REST API base URL |
+
+## Optional Xquik Scans
+
+Chrome remains the default scan source. To scan through Xquik instead, set `XQUIK_API_KEY`, restart the local server, open Advanced Filters, and switch Search Source to `Xquik API`.
+
+Xquik scans use the same keyword groups, minimum-like filter, blacklist, whitelist, and ranking model as Chrome scans. The `People` result type stays Chrome-only because the Xquik source returns tweet search results.
 
 ## Notes
 
@@ -143,6 +152,4 @@ npm start
 
 MIT
 
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=ai-martin-lau/x-hotspot-radar&type=Date)](https://star-history.com/#ai-martin-lau/x-hotspot-radar&Date)
+Xquik is an independent third-party service. Not affiliated with X Corp. "Twitter" and "X" are trademarks of X Corp.

@@ -113,6 +113,14 @@ CLAUDE_BIN=/path/to/claude npm start
 | `CHROME_DEBUG_URL` | `http://127.0.0.1:9222` | Chrome DevTools 地址 |
 | `CDP_PROXY_URL` | 空 | 可选的 CDP 代理地址 |
 | `CLAUDE_BIN` | `claude` | Claude Code CLI 路径 |
+| `XQUIK_API_KEY` | 空 | 可选的 Xquik API key，用于 API 扫描 |
+| `XQUIK_API_BASE_URL` | `https://xquik.com/api/v1` | Xquik REST API 地址 |
+
+## 可选 Xquik 扫描
+
+Chrome 仍是默认扫描来源。设置 `XQUIK_API_KEY` 后重启本地服务，在高级筛选里把搜索来源切到 `Xquik API` 即可使用 API 扫描。
+
+Xquik 扫描复用关键词组、最低点赞、黑名单、白名单和现有排序逻辑。`People` 类型仍只支持 Chrome，因为 Xquik 来源返回的是帖子搜索结果。
 
 ## 注意事项
 
@@ -139,6 +147,4 @@ npm start
 
 MIT
 
-## Star 趋势
-
-[![Star 趋势图](https://api.star-history.com/svg?repos=ai-martin-lau/x-hotspot-radar&type=Date)](https://star-history.com/#ai-martin-lau/x-hotspot-radar&Date)
+Xquik is an independent third-party service. Not affiliated with X Corp. "Twitter" and "X" are trademarks of X Corp.
