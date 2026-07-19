@@ -5,6 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
+import { normalizeXquikTweet } from './lib/xquik.mjs';
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8787);
 const CDP_PROXY_URL = process.env.CDP_PROXY_URL || '';
@@ -15,6 +17,9 @@ const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'sonnet';
 // Opus 高峰会被限流，一条短回复可能要几分钟，给足 5 分钟避免误判超时
 const CLAUDE_TIMEOUT_MS = Number(process.env.CLAUDE_TIMEOUT_MS) || 300000;
+const XQUIK_API_KEY = process.env.XQUIK_API_KEY || '';
+const XQUIK_API_BASE_URL = (process.env.XQUIK_API_BASE_URL || 'https://xquik.com/api/v1').replace(/\/+$/, '');
+const XQUIK_CONTRACT_VERSION = '2026-04-29';
 
 const DOMAIN_TERMS = [
   'AI', 'ChatGPT', 'Claude', 'Codex', 'OpenAI', 'Anthropic', 'Agent', 'Grok', 'Gemini', 'Cursor',
@@ -328,6 +333,14 @@ function buildQuery({ keyword, lang, minFav, since, exclude, filter }) {
 function buildSearchUrl(query, filter) {
   const mode = filter === 'top' ? '&f=top' : filter === 'people' ? '&f=user' : '&f=live';
   return `https://x.com/search?q=${encodeURIComponent(query)}&src=typed_query${mode}`;
+}
+
+function buildXquikSearchUrl(query, filter, limit) {
+  const url = new URL(`${XQUIK_API_BASE_URL}/x/tweets/search`);
+  url.searchParams.set('q', query);
+  url.searchParams.set('queryType', filter === 'top' ? 'Top' : 'Latest');
+  url.searchParams.set('limit', String(Math.max(1, Math.min(Number(limit) || 20, 200))));
+  return url;
 }
 
 function parseNumber(value) {
@@ -699,6 +712,49 @@ async function scanQueryViaProxy(queryConfig) {
   }
 }
 
+async function scanQueryViaXquikApi(queryConfig) {
+  const { keyword, query, filter, limit } = queryConfig;
+  if (!XQUIK_API_KEY) {
+    return {
+      keyword,
+      query,
+      url: '',
+      posts: [],
+      error: 'XQUIK_API_KEY 未配置',
+    };
+  }
+
+  const url = buildXquikSearchUrl(query, filter, limit);
+  try {
+    const data = await fetchJson(url, {
+      timeoutMs: 30000,
+      headers: {
+        accept: 'application/json',
+        'x-api-key': XQUIK_API_KEY,
+        'xquik-api-contract': XQUIK_CONTRACT_VERSION,
+      },
+    });
+    const posts = Array.isArray(data?.tweets)
+      ? data.tweets.map((tweet) => enrichPost(normalizeXquikTweet(tweet), keyword))
+      : [];
+    return {
+      keyword,
+      query,
+      url: String(url),
+      posts,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      keyword,
+      query,
+      url: String(url),
+      posts: [],
+      error: error.message || String(error),
+    };
+  }
+}
+
 async function fetchPostText(url) {
   const statusId = (String(url || '').match(/\/status\/(\d+)/) || [])[1] || '';
   if (!statusId) throw new Error('无法识别原帖链接');
@@ -810,11 +866,13 @@ async function handleScan(req, res) {
   const blacklist = normalizeBlacklist(payload.blacklist);
   const whitelist = normalizeBlacklist(payload.whitelist);
   const strategy = payload.strategy === 'replySurf' ? 'replySurf' : 'default';
+  const source = payload.source === 'xquik' ? 'xquik' : 'chrome';
   const offset = Math.max(0, Math.min(Number(payload.offset) || 0, keywords.length));
   const remaining = Math.max(keywords.length - offset, 1);
   const requestedLimit = Number(payload.limit);
   const limit = Math.max(1, Math.min(Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : remaining, remaining));
   const scrolls = Math.max(1, Math.min(Number(payload.scrolls) || 4, 10));
+  const resultLimit = Math.min(scrolls * 20, 200);
   const selected = keywords.slice(offset, offset + limit);
   // 纯盯人模式：没有关键词但白名单有 @handle 时照常扫（只跑盯人直扫那一段）
   const watchHandlesEarly = whitelist.filter((term) => term.startsWith('@'));
@@ -823,9 +881,14 @@ async function handleScan(req, res) {
     return;
   }
 
-  const health = await getCdpHealth().catch(() => null);
-  if (!health?.connected) {
-    sendJson(res, { ok: false, error: getCdpSetupHint() }, 500);
+  if (source === 'chrome') {
+    const health = await getCdpHealth().catch(() => null);
+    if (!health?.connected) {
+      sendJson(res, { ok: false, error: getCdpSetupHint() }, 500);
+      return;
+    }
+  } else if (payload.filter === 'people') {
+    sendJson(res, { ok: false, error: 'Xquik API 来源支持 Latest / Top 帖子搜索，请先切换结果类型' }, 400);
     return;
   }
 
@@ -842,6 +905,8 @@ async function handleScan(req, res) {
       keyword,
       query,
       url: buildSearchUrl(query, payload.filter || 'live'),
+      filter: payload.filter || 'live',
+      limit: resultLimit,
       scrolls,
     };
   });
@@ -861,6 +926,8 @@ async function handleScan(req, res) {
         keyword: `@${handle}`,
         query,
         url: buildSearchUrl(query, 'live'),
+        filter: 'live',
+        limit: Math.min(resultLimit, 40),
         scrolls: Math.min(scrolls, 2),
       });
     }
@@ -872,7 +939,7 @@ async function handleScan(req, res) {
   let safetyFilteredCount = 0;
   let whitelistedCount = 0;
   for (const job of jobs) {
-    const result = await scanQuery(job);
+    const result = source === 'xquik' ? await scanQueryViaXquikApi(job) : await scanQuery(job);
     // 白名单作者直通：跳过黑名单/敏感过滤，且不会被「略过」丢弃
     const posts = result.posts.map((post) => {
       if (!isWhitelistedPost(post, whitelist)) return post;
@@ -887,6 +954,7 @@ async function handleScan(req, res) {
       keyword: result.keyword,
       query: result.query,
       url: result.url,
+      source,
       count: safePosts.length,
       error: result.error,
     });
@@ -907,6 +975,7 @@ async function handleScan(req, res) {
     filteredCount,
     safetyFilteredCount,
     whitelistedCount,
+    source,
     scanned,
     // 盯人帖永不截断，话题帖最多 80 条
     results: [

@@ -6,7 +6,7 @@
   "private": false,
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check server.mjs"
+    "check": "node scripts/check.mjs && node --test"
   },
   "engines": {
     "node": ">=22"

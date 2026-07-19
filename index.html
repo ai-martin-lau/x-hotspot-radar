@@ -996,6 +996,14 @@
                 </div>
               </div>
 
+              <div class="field">
+                <label for="sourceInput">搜索来源</label>
+                <select id="sourceInput">
+                  <option value="chrome">Chrome 当前账号</option>
+                  <option value="xquik">Xquik API</option>
+                </select>
+              </div>
+
               <div class="row">
                 <div class="field">
                   <label for="sinceInput">起始日期</label>
@@ -1196,6 +1204,7 @@
       minFavInput: document.getElementById('minFavInput'),
       langInput: document.getElementById('langInput'),
       excludeInput: document.getElementById('excludeInput'),
+      sourceInput: document.getElementById('sourceInput'),
       customKeywords: document.getElementById('customKeywords'),
       blacklistInput: document.getElementById('blacklistInput'),
       blacklistEditor: document.getElementById('blacklistEditor'),
@@ -1266,6 +1275,7 @@
           lang: saved.lang ?? 'zh',
           exclude: saved.exclude ?? '-filter:replies',
           filter: saved.filter || 'live',
+          source: saved.source === 'xquik' ? 'xquik' : 'chrome',
           custom: saved.custom || '',
           blacklist: normalizeBlacklistText(saved.blacklist ?? DEFAULT_BLACKLIST),
           ...migrateWhitelistFields(saved),
@@ -1281,6 +1291,7 @@
           lang: 'zh',
           exclude: '-filter:replies',
           filter: 'live',
+          source: 'chrome',
           custom: '',
           blacklist: DEFAULT_BLACKLIST,
           whitelistZh: DEFAULT_WHITELIST_ZH,
@@ -1653,6 +1664,7 @@
       els.minFavInput.value = state.minFav;
       els.langInput.value = state.lang;
       els.excludeInput.value = state.exclude;
+      els.sourceInput.value = state.source || 'chrome';
       els.customKeywords.value = state.custom;
       els.blacklistInput.value = state.blacklist;
       els.whitelistZhInput.value = state.whitelistZh;
@@ -1678,6 +1690,7 @@
         ['minFav', els.minFavInput],
         ['lang', els.langInput],
         ['exclude', els.excludeInput],
+        ['source', els.sourceInput],
         ['scrolls', els.scrollInput]
       ].forEach(([key, el]) => {
         el.addEventListener('input', () => {
@@ -1816,6 +1829,7 @@
       els.minFavInput.value = state.minFav;
       els.langInput.value = state.lang;
       els.excludeInput.value = state.exclude;
+      els.sourceInput.value = state.source || 'chrome';
       els.customKeywords.value = state.custom;
       els.blacklistInput.value = state.blacklist;
       els.whitelistZhInput.value = state.whitelistZh;
@@ -1869,6 +1883,7 @@
         minFav: Number(state.minFav) || 0,
         since: state.since,
         exclude: state.exclude,
+        source: state.source || 'chrome',
         blacklist: getBlacklistTerms(),
         whitelist: watchTerms,
         filter: activeFilter,
@@ -1892,7 +1907,7 @@
         if (!response.ok || !data.ok) {
           throw new Error(data.error || `扫描失败：${response.status}`);
         }
-        renderOpportunities(data.results || [], data.scanned || [], data.filteredCount || 0, strategy, data.safetyFilteredCount || 0, data.whitelistedCount || 0);
+        renderOpportunities(data.results || [], data.scanned || [], data.filteredCount || 0, strategy, data.safetyFilteredCount || 0, data.whitelistedCount || 0, data.source || 'chrome');
       } catch (error) {
         els.countText.textContent = '扫描失败';
         els.queryList.innerHTML = `
@@ -1907,9 +1922,9 @@
       }
     }
 
-    function renderOpportunities(results, scanned, filteredCount = 0, strategy = 'default', safetyFilteredCount = 0, whitelistedCount = 0) {
+    function renderOpportunities(results, scanned, filteredCount = 0, strategy = 'default', safetyFilteredCount = 0, whitelistedCount = 0, source = 'chrome') {
       currentView = 'results';
-      lastScanData = { results, scanned, filteredCount, strategy, safetyFilteredCount, whitelistedCount };
+      lastScanData = { results, scanned, filteredCount, strategy, safetyFilteredCount, whitelistedCount, source };
       // 盯人区（白名单直扫）置顶：先按标签权重（必回>可回>看看>略过），同级再按时间新→旧；话题战场（按热度）在下
       const repliedMap = getRepliedMap();
       const isReplied = (item) => Boolean(item.id && repliedMap[String(item.id)]);
@@ -1942,12 +1957,13 @@
       const safetySummary = safetyFilteredCount ? ` · 敏感内容已过滤 ${safetyFilteredCount} 条` : '';
       const whitelistSummary = whitelistedCount ? ` · 白名单直通 ${whitelistedCount} 条` : '';
       const repliedSummary = repliedSkipped ? ` · 已回过剔除 ${repliedSkipped} 条` : '';
+      const sourceSummary = source === 'xquik' ? '来源：Xquik API · ' : '来源：Chrome 当前账号 · ';
 
       if (!results.length) {
         els.queryList.innerHTML = `
           <p class="scan-note">
             没扫到符合条件的帖子。可以降低最低点赞、把结果类型切回 Latest，或者减少排除条件。<br>
-            本次扫描：${escapeHtml(scanSummary || '无结果')}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}${escapeHtml(whitelistSummary)}${escapeHtml(repliedSummary)}
+            本次扫描：${escapeHtml(sourceSummary)}${escapeHtml(scanSummary || '无结果')}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}${escapeHtml(whitelistSummary)}${escapeHtml(repliedSummary)}
           </p>
         `;
         return;
@@ -1961,7 +1977,7 @@
         </div>` : '';
 
       els.queryList.innerHTML = `
-        <p class="scan-note">${strategy === 'replySurf' ? '找回复机会：优先看热度分高、流量池大、领域相关的帖子。' : '本次扫描：'}${escapeHtml(scanSummary)}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}${escapeHtml(whitelistSummary)}${escapeHtml(repliedSummary)}</p>
+        <p class="scan-note">${strategy === 'replySurf' ? '找回复机会：优先看热度分高、流量池大、领域相关的帖子。' : '本次扫描：'}${escapeHtml(sourceSummary)}${escapeHtml(scanSummary)}${escapeHtml(blacklistSummary)}${escapeHtml(safetySummary)}${escapeHtml(whitelistSummary)}${escapeHtml(repliedSummary)}</p>
         ${filterBar}
         ${showWatch.length ? `<div class="section-head">🎯 盯人区 · ${showWatch.length} 条 · 必回优先，同级按时间倒序</div>` : ''}
         ${showWatch.map((item, index) => renderOpportunityCard(item, index)).join('')}
@@ -1974,7 +1990,7 @@
         button.addEventListener('click', () => {
           resultFilter = button.dataset.resultFilter;
           if (lastScanData) {
-            renderOpportunities(lastScanData.results, lastScanData.scanned, lastScanData.filteredCount, lastScanData.strategy, lastScanData.safetyFilteredCount, lastScanData.whitelistedCount);
+            renderOpportunities(lastScanData.results, lastScanData.scanned, lastScanData.filteredCount, lastScanData.strategy, lastScanData.safetyFilteredCount, lastScanData.whitelistedCount, lastScanData.source);
           }
         });
       });

@@ -113,6 +113,14 @@ Sin Claude Code, el escaneo y la ordenación siguen funcionando con normalidad; 
 | `CHROME_DEBUG_URL` | `http://127.0.0.1:9222` | Dirección de Chrome DevTools |
 | `CDP_PROXY_URL` | vacío | Dirección opcional del proxy CDP |
 | `CLAUDE_BIN` | `claude` | Ruta del Claude Code CLI |
+| `XQUIK_API_KEY` | vacío | Clave opcional de Xquik para escaneos por API |
+| `XQUIK_API_BASE_URL` | `https://xquik.com/api/v1` | URL base de la API REST de Xquik |
+
+## Escaneos opcionales con Xquik
+
+Chrome sigue siendo la fuente predeterminada. Para usar Xquik, configura `XQUIK_API_KEY`, reinicia el servidor local y cambia Search Source a `Xquik API` en Advanced Filters.
+
+Los escaneos con Xquik reutilizan los grupos de palabras clave, el mínimo de likes, la blocklist, la allowlist y el ranking existente. El tipo `People` sigue siendo solo para Chrome porque Xquik devuelve resultados de búsqueda de posts.
 
 ## Notas
 
@@ -139,6 +147,4 @@ npm start
 
 MIT
 
-## Historial de estrellas
-
-[![Gráfico de historial de estrellas](https://api.star-history.com/svg?repos=ai-martin-lau/x-hotspot-radar&type=Date)](https://star-history.com/#ai-martin-lau/x-hotspot-radar&Date)
+Xquik is an independent third-party service. Not affiliated with X Corp. "Twitter" and "X" are trademarks of X Corp.

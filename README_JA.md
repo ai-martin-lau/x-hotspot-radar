@@ -113,6 +113,14 @@ Claude Code がなくても、スキャンと並べ替えは通常どおり使�
 | `CHROME_DEBUG_URL` | `http://127.0.0.1:9222` | Chrome DevTools のアドレス |
 | `CDP_PROXY_URL` | 空 | 任意の CDP プロキシアドレス |
 | `CLAUDE_BIN` | `claude` | Claude Code CLI のパス |
+| `XQUIK_API_KEY` | 空 | API スキャン用の任意の Xquik API キー |
+| `XQUIK_API_BASE_URL` | `https://xquik.com/api/v1` | Xquik REST API のベース URL |
+
+## 任意の Xquik スキャン
+
+Chrome は引き続きデフォルトのスキャンソースです。Xquik を使うには `XQUIK_API_KEY` を設定し、ローカルサーバーを再起動して、Advanced Filters の Search Source を `Xquik API` に切り替えます。
+
+Xquik スキャンは、キーワードグループ、最低いいね数、ブロックリスト、ホワイトリスト、既存のランキングを再利用します。`People` タイプは Chrome 専用のままです。Xquik ソースは投稿検索結果を返すためです。
 
 ## 注意事項
 
@@ -139,6 +147,4 @@ npm start
 
 MIT
 
-## スター推移
-
-[![スター推移グラフ](https://api.star-history.com/svg?repos=ai-martin-lau/x-hotspot-radar&type=Date)](https://star-history.com/#ai-martin-lau/x-hotspot-radar&Date)
+Xquik is an independent third-party service. Not affiliated with X Corp. "Twitter" and "X" are trademarks of X Corp.
